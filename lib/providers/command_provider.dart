@@ -3,6 +3,7 @@ import 'package:uuid/uuid.dart';
 import '../models/command.dart';
 import '../services/storage_service.dart';
 import '../services/git_service.dart';
+import '../services/paste_service.dart';
 
 /// 指令状态管理
 ///
@@ -118,6 +119,9 @@ class CommandProvider extends ChangeNotifier {
     _commands[index].lastUsedAt = DateTime.now();
     _applyFilter();
     notifyListeners();
+
+    // 粘贴到前台窗口
+    await PasteService.paste(_commands[index].content);
 
     // 持久化 + Git 同步
     await _persistAndSync('feat: use command');

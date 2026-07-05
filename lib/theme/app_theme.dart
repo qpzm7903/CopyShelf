@@ -23,7 +23,7 @@ class AppTheme {
         centerTitle: true,
         surfaceTintColor: Colors.transparent,
       ),
-      cardTheme: const CardTheme(
+      cardTheme: const CardThemeData(
         color: Colors.white,
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -97,7 +97,7 @@ class AppTheme {
         centerTitle: true,
         surfaceTintColor: Colors.transparent,
       ),
-      cardTheme: const CardTheme(
+      cardTheme: const CardThemeData(
         color: Color(0xFF2A2A2A),
         elevation: 0,
         shape: RoundedRectangleBorder(

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/command_provider.dart';
 
 /// 搜索主界面（类 Spotlight 搜索框）
 ///
 /// 顶部是搜索输入框，下方是指令列表。
-/// 无搜索结果时显示空状态提示。
 /// 使用键盘上下键选择，回车粘贴。
 class SearchOverlay extends StatefulWidget {
   const SearchOverlay({super.key});
@@ -20,10 +20,53 @@ class _SearchOverlayState extends State<SearchOverlay> {
   int _selectedIndex = 0;
 
   @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  @override
   void dispose() {
+    _focusNode.removeListener(_onFocusChange);
     _searchController.dispose();
     _focusNode.dispose();
     super.dispose();
+  }
+
+  void _onFocusChange() {
+    if (!_focusNode.hasFocus) {
+      _focusNode.requestFocus();
+    }
+  }
+
+  /// 处理键盘事件
+  KeyEventResult _handleKeyEvent(KeyEvent event, CommandProvider provider) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      setState(() {
+        _selectedIndex = (_selectedIndex + 1) % provider.filteredCommands.length;
+      });
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      setState(() {
+        _selectedIndex = _selectedIndex - 1;
+        if (_selectedIndex < 0) {
+          _selectedIndex = provider.filteredCommands.length - 1;
+        }
+      });
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      provider.hideSearch();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter) {
+      _pasteSelected(provider);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   @override
@@ -32,17 +75,20 @@ class _SearchOverlayState extends State<SearchOverlay> {
       builder: (context, provider, _) {
         final commands = provider.filteredCommands;
 
-        return Column(
-          children: [
-            // 搜索输入框
-            _buildSearchBar(context, provider),
-            // 指令列表
-            Expanded(
-              child: commands.isEmpty
-                  ? _buildEmptyState(provider)
-                  : _buildCommandList(context, provider, commands),
-            ),
-          ],
+        return Focus(
+          autofocus: true,
+          focusNode: _focusNode,
+          onKeyEvent: (node, event) => _handleKeyEvent(event, provider),
+          child: Column(
+            children: [
+              _buildSearchBar(context, provider),
+              Expanded(
+                child: commands.isEmpty
+                    ? _buildEmptyState(provider)
+                    : _buildCommandList(context, provider, commands),
+              ),
+            ],
+          ),
         );
       },
     );
@@ -59,7 +105,6 @@ class _SearchOverlayState extends State<SearchOverlay> {
       ),
       child: TextField(
         controller: _searchController,
-        focusNode: _focusNode,
         autofocus: true,
         decoration: const InputDecoration(
           hintText: '搜索指令…',
@@ -73,32 +118,6 @@ class _SearchOverlayState extends State<SearchOverlay> {
           });
         },
         onSubmitted: (_) => _pasteSelected(provider),
-        onKeyEvent: (event, details) {
-          if (details.runtimeType.toString() == 'KeyDownEvent') {
-            final logicalKey = event.logicalKey;
-            // 处理上下键选择
-            if (logicalKey == LogicalKeyboardKey.arrowDown) {
-              setState(() {
-                _selectedIndex = (_selectedIndex + 1) % provider.filteredCommands.length;
-              });
-              return KeyEventResult.handled;
-            }
-            if (logicalKey == LogicalKeyboardKey.arrowUp) {
-              setState(() {
-                _selectedIndex = _selectedIndex - 1;
-                if (_selectedIndex < 0) {
-                  _selectedIndex = provider.filteredCommands.length - 1;
-                }
-              });
-              return KeyEventResult.handled;
-            }
-            if (logicalKey == LogicalKeyboardKey.escape) {
-              provider.hideSearch();
-              return KeyEventResult.handled;
-            }
-          }
-          return KeyEventResult.ignored;
-        },
       ),
     );
   }
@@ -156,15 +175,6 @@ class _SearchOverlayState extends State<SearchOverlay> {
             provider.useCommand(cmd.id);
             provider.hideSearch();
           },
-          onKeyEvent: (event, details) {
-            if (details.runtimeType.toString() == 'KeyDownEvent' &&
-                event.logicalKey == LogicalKeyboardKey.enter) {
-              provider.useCommand(cmd.id);
-              provider.hideSearch();
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          },
         );
       },
     );
@@ -209,5 +219,27 @@ class _SearchOverlayState extends State<SearchOverlay> {
     final cmd = provider.filteredCommands[_selectedIndex];
     provider.useCommand(cmd.id);
     provider.hideSearch();
+  }
+}
+
+/// 标签小芯片
+class _TagChip extends StatelessWidget {
+  final String label;
+  const _TagChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF0F0FF),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: const Color(0xFFE0E0FF), width: 0.5),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 10, color: Color(0xFF6366F1)),
+      ),
+    );
   }
 }

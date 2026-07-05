@@ -13,9 +13,10 @@ class PasteService {
   /// 先写入系统剪贴板，再模拟 Ctrl+V。
   static Future<bool> paste(String text) async {
     try {
-      await _channel.invokeMethod('paste', {'text': text});
+      await _channel.invokeMethod<void>('paste', {'text': text});
       return true;
     } catch (e) {
+      // MethodChannel 未注册（测试环境或未连接时）不抛异常
       return false;
     }
   }
