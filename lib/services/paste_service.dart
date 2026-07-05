@@ -2,21 +2,17 @@ import 'package:flutter/services.dart';
 
 /// 粘贴服务
 ///
-/// 通过 Method Channel 调用 Windows 原生 API：
-/// 1. 将文本写入系统剪贴板
-/// 2. 模拟 Ctrl+V 粘贴到前台窗口
+/// 使用 Flutter 内置的 Clipboard API 将文本写入系统剪贴板。
+/// 用户选中指令后，内容已到剪贴板，按 Ctrl+V 即可粘贴。
+///
+/// TODO: v0.2 实现自动模拟 Ctrl+V（需要 Win32 平台通道或 dart:ffi）
 class PasteService {
-  static const _channel = MethodChannel('copyshelf/paste');
-
-  /// 将文本粘贴到当前活动窗口
-  ///
-  /// 先写入系统剪贴板，再模拟 Ctrl+V。
+  /// 将文本复制到系统剪贴板
   static Future<bool> paste(String text) async {
     try {
-      await _channel.invokeMethod<void>('paste', {'text': text});
+      await Clipboard.setData(ClipboardData(text: text));
       return true;
     } catch (e) {
-      // MethodChannel 未注册（测试环境或未连接时）不抛异常
       return false;
     }
   }
