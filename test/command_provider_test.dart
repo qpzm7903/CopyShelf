@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:copyshelf/models/command.dart';
 import 'package:copyshelf/providers/command_provider.dart';
@@ -24,7 +25,7 @@ class MockStorageService extends StorageService {
   Future<String> getDataDirPath() async => '/test/data';
 
   @override
-  Future<void> ensureDataDir({String? customPath}) async {}
+  Future<Directory> ensureDataDir({String? customPath}) async => Directory('/test/data');
 
   List<Command> get storedCommands => _storedCommands;
 }

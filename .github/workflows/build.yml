@@ -105,6 +105,15 @@ jobs:
           dart --version
           Write-Host "========================================"
 
+      - name: Generate Windows platform files
+        run: flutter create --platforms=windows --project-name copyshelf .
+
+      - name: Apply custom paste channel
+        shell: pwsh
+        run: |
+          Copy-Item -Path patches\flutter_window_paste.cpp -Destination windows\runner\flutter_window.cpp -Force
+          Copy-Item -Path patches\flutter_window_paste.h -Destination windows\runner\flutter_window.h -Force
+
       - name: Install dependencies
         run: flutter pub get
 
