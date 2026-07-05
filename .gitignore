@@ -1,0 +1,38 @@
+# Flutter
+.flutter-plugins
+.flutter-plugins-dependencies
+.dart_tool/
+build/
+*.iml
+.idea/
+
+# macOS
+.DS_Store
+
+# Windows
+*.exe
+*.exe.config
+*.exe.modules
+*.exe.manifest
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.obj
+*.ipdb
+*.iobj
+CMakeFiles/
+cmake-build-*/
+*.vcxproj*
+*.sln
+*.suo
+*.user
+x64/
+Win32/
+out/
+
+# VS Code
+.vscode/
+
+# Test
+coverage/

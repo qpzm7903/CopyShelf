@@ -1,0 +1,26 @@
+name: copyshelf
+description: Windows 剪贴板指令管理器 — 快速搜索并粘贴你配置的指令/命令片段
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.10.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  provider: 6.1.5+1
+  shared_preferences: 2.5.5
+  path_provider: 2.1.5
+  window_manager: 0.5.1
+  hotkey_manager: 0.2.3
+  system_tray: 2.0.3
+  uuid: 4.5.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: 6.0.0
+
+flutter:
+  uses-material-design: true

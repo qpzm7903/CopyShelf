@@ -1,0 +1,202 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  FLUTTER_VERSION: '3.44.1'
+  APP_NAME: ${{ github.event.repository.name }}
+
+jobs:
+  # ========== 版本元数据 ==========
+  metadata:
+    runs-on: ubuntu-latest
+    name: Prepare package metadata
+    outputs:
+      app_version: ${{ steps.version.outputs.jversion }}
+    steps:
+      - name: Prepare package version
+        id: version
+        shell: bash
+        run: |
+          jversion="0.1.0"
+
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            raw_tag="${{ github.ref_name }}"
+            echo "Detected Tag: $raw_tag"
+
+            # 去除 'v' 或 'V' 前缀
+            version=$(echo "$raw_tag" | sed -E 's/^[vV]//')
+            jversion=$(echo "$version" | sed -E 's/^([0-9]+\.[0-9]+(\.[0-9]+)?).*/\1/')
+
+            if [ -z "$jversion" ]; then
+              echo "Warning: Could not parse numeric version from tag $raw_tag, defaulting to 0.1.0"
+              jversion="0.1.0"
+            fi
+            echo "Using Tag Version: $version (JPackage: $jversion)"
+          fi
+
+          echo "jversion=$jversion" >> $GITHUB_OUTPUT
+
+  # ========== 测试 ==========
+  test:
+    needs: [ metadata ]
+    runs-on: windows-latest
+    name: Run tests
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Print environment info
+        shell: pwsh
+        run: |
+          Write-Host "========================================"
+          Write-Host "  测试环境信息"
+          Write-Host "========================================"
+          flutter --version
+          dart --version
+          Write-Host "========================================"
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Run tests
+        run: flutter test
+
+  # ========== 构建 Windows ==========
+  build-windows:
+    needs: [ metadata ]
+    runs-on: windows-latest
+    name: Build Windows EXE
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: 'stable'
+          cache: true
+
+      - name: Print environment info
+        shell: pwsh
+        run: |
+          Write-Host "========================================"
+          Write-Host "  构建环境信息"
+          Write-Host "========================================"
+          Write-Host "OS: $($env:OS) $($env:PROCESSOR_ARCHITECTURE)"
+          Write-Host "PWD: $(Get-Location)"
+          flutter --version
+          dart --version
+          Write-Host "========================================"
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: List build output
+        shell: pwsh
+        run: |
+          $releaseDir = 'build\windows\x64\runner\Release'
+          Write-Host "========================================"
+          Write-Host "  构建产物列表: $releaseDir"
+          Write-Host "========================================"
+          if (Test-Path $releaseDir) {
+            Get-ChildItem $releaseDir | ForEach-Object {
+              $sizeMB = [math]::Round($_.Length / 1MB, 2)
+              Write-Host "  $($_.Name)  ($sizeMB MB)"
+            }
+            $totalMB = [math]::Round((Get-ChildItem $releaseDir | Measure-Object Length -Sum).Sum / 1MB, 2)
+            Write-Host "  总大小: $totalMB MB"
+          } else {
+            Write-Host "  [目录不存在]"
+          }
+          Write-Host "========================================"
+
+      - name: Create Windows ZIP
+        shell: pwsh
+        run: |
+          Write-Host "创建 ZIP 包..."
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath windows.zip
+          $zipSizeMB = [math]::Round((Get-Item windows.zip).Length / 1MB, 2)
+          Write-Host "ZIP 创建完成: windows.zip ($zipSizeMB MB)"
+
+      - name: Rename Windows ZIP
+        run: |
+          mv windows.zip ./${{ env.APP_NAME }}-${{ needs.metadata.outputs.app_version }}-windows-x86_64.zip
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.APP_NAME }}-${{ needs.metadata.outputs.app_version }}-windows-x86_64.zip
+          path: ${{ env.APP_NAME }}-${{ needs.metadata.outputs.app_version }}-windows-x86_64.zip
+          retention-days: 1
+
+  # ========== 发布到 GitHub Releases ==========
+  release:
+    needs: [ build-windows ]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    environment: release
+
+    steps:
+      - name: Checkout code (for changelog)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          current_tag=${GITHUB_REF#refs/tags/}
+          prev_tag=$(git tag --sort=-version:refname | grep -v "^$current_tag$" | head -1)
+
+          body_content=""
+          if [[ -n "$prev_tag" ]]; then
+            body_content=$(git log --pretty=format:"* %s (%h)" "$prev_tag".."$current_tag" -- . ":(exclude)docs" ":(exclude).github")
+          else
+            body_content="Initial release or no previous tag found."
+          fi
+
+          {
+            echo "body<<EOF"
+            echo "$body_content"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: artifacts/*
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: ${{ steps.notes.outputs.body }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') || contains(github.ref_name, '-beta') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
