@@ -12,27 +12,27 @@ bool simulateCtrlV() {
   // INPUT 是 FFI Struct，必须通过 Pointer 分配，不能用 INPUT() 构造。
   final pInputs = calloc<INPUT>(4);
   try {
-    final inputs = pInputs.asTypedList(4);
+    // 通过 Pointer 的 [] 运算符访问数组元素
 
     // 1. Ctrl 按下
-    inputs[0].type = INPUT_KEYBOARD;
-    inputs[0].ki.wVk = VK_CONTROL;
-    inputs[0].ki.dwFlags = 0;
+    pInputs[0].type = INPUT_KEYBOARD;
+    pInputs[0].ki.wVk = VK_CONTROL;
+    pInputs[0].ki.dwFlags = 0;
 
     // 2. V 按下
-    inputs[1].type = INPUT_KEYBOARD;
-    inputs[1].ki.wVk = 'V'.codeUnitAt(0);
-    inputs[1].ki.dwFlags = 0;
+    pInputs[1].type = INPUT_KEYBOARD;
+    pInputs[1].ki.wVk = 'V'.codeUnitAt(0);
+    pInputs[1].ki.dwFlags = 0;
 
     // 3. V 释放
-    inputs[2].type = INPUT_KEYBOARD;
-    inputs[2].ki.wVk = 'V'.codeUnitAt(0);
-    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    pInputs[2].type = INPUT_KEYBOARD;
+    pInputs[2].ki.wVk = 'V'.codeUnitAt(0);
+    pInputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
 
     // 4. Ctrl 释放
-    inputs[3].type = INPUT_KEYBOARD;
-    inputs[3].ki.wVk = VK_CONTROL;
-    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+    pInputs[3].type = INPUT_KEYBOARD;
+    pInputs[3].ki.wVk = VK_CONTROL;
+    pInputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
 
     final sent = SendInput(
       4,
