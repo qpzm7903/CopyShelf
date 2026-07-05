@@ -1,3 +1,5 @@
+import 'dart:ffi';
+import 'package:ffi/ffi.dart';
 import 'package:win32/win32.dart';
 
 /// 在 Windows 平台模拟一次 Ctrl+V 按键，把已写入剪贴板的内容粘贴到前台窗口。
@@ -7,28 +9,38 @@ import 'package:win32/win32.dart';
 /// 返回 true 表示 SendInput 成功发送了 4 个事件（Ctrl/V 按下+释放）；
 /// 返回 false 表示调用失败。
 bool simulateCtrlV() {
-  final inputs = List<INPUT>.filled(4, INPUT());
+  // INPUT 是 FFI Struct，必须通过 Pointer 分配，不能用 INPUT() 构造。
+  final pInputs = calloc<INPUT>(4);
+  try {
+    final inputs = pInputs.asTypedList(4);
 
-  // 1. Ctrl 按下
-  inputs[0].type = INPUT_KEYBOARD;
-  inputs[0].ki.wVk = VK_CONTROL;
-  inputs[0].ki.dwFlags = 0;
+    // 1. Ctrl 按下
+    inputs[0].type = INPUT_KEYBOARD;
+    inputs[0].ki.wVk = VK_CONTROL;
+    inputs[0].ki.dwFlags = 0;
 
-  // 2. V 按下
-  inputs[1].type = INPUT_KEYBOARD;
-  inputs[1].ki.wVk = 'V'.codeUnitAt(0);
-  inputs[1].ki.dwFlags = 0;
+    // 2. V 按下
+    inputs[1].type = INPUT_KEYBOARD;
+    inputs[1].ki.wVk = 'V'.codeUnitAt(0);
+    inputs[1].ki.dwFlags = 0;
 
-  // 3. V 释放
-  inputs[2].type = INPUT_KEYBOARD;
-  inputs[2].ki.wVk = 'V'.codeUnitAt(0);
-  inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
+    // 3. V 释放
+    inputs[2].type = INPUT_KEYBOARD;
+    inputs[2].ki.wVk = 'V'.codeUnitAt(0);
+    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
 
-  // 4. Ctrl 释放
-  inputs[3].type = INPUT_KEYBOARD;
-  inputs[3].ki.wVk = VK_CONTROL;
-  inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
+    // 4. Ctrl 释放
+    inputs[3].type = INPUT_KEYBOARD;
+    inputs[3].ki.wVk = VK_CONTROL;
+    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
 
-  final sent = SendInput(inputs.length, inputs.elementAt(0), INPUT_SIZE);
-  return sent == inputs.length;
+    final sent = SendInput(
+      4,
+      pInputs,
+      sizeOf<INPUT>(),
+    );
+    return sent == 4;
+  } finally {
+    calloc.free(pInputs);
+  }
 }
