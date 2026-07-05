@@ -11,7 +11,7 @@ import '../services/git_service.dart';
 class CommandProvider extends ChangeNotifier {
   final StorageService _storage;
   final GitService _git;
-  final _uuid = const Uuid();
+  final _uuid = Uuid();
 
   List<Command> _commands = [];
   List<Command> _filteredCommands = [];
