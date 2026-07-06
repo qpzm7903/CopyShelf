@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 import 'providers/command_provider.dart';
 import 'services/storage_service.dart';
 import 'services/git_service.dart';
+import 'services/hotkey_service.dart';
 import 'theme/app_theme.dart';
 import 'pages/home_page.dart';
 import 'utils/constants.dart';
@@ -42,6 +43,21 @@ void main() async {
 
   // 完整初始化（数据目录、Git、加载指令）
   await commandProvider.init();
+
+  // 注册全局快捷键：Ctrl+Alt+V
+  if (Platform.isWindows) {
+    await HotkeyService.start(
+      onTriggered: () async {
+        if (await windowManager.isVisible()) {
+          await windowManager.hide();
+        } else {
+          await windowManager.show();
+          await windowManager.focus();
+          commandProvider.showSearch();
+        }
+      },
+    );
+  }
 
   runApp(CopyShelfApp(commandProvider: commandProvider));
 }
