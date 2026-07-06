@@ -97,7 +97,7 @@ class HotkeyService {
     final msg = calloc<MSG>();
     try {
       while (true) {
-        final res = GetMessageW(msg, 0, 0, 0);
+        final res = GetMessage(msg, 0, 0, 0);
         if (res <= 0) break; // WM_QUIT 或错误
 
         if (msg.ref.message == WM_HOTKEY && msg.ref.wParam == args.hotkeyId) {
