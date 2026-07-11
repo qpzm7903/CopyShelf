@@ -7,14 +7,14 @@ import 'package:flutter/material.dart';
 /// （命令/代码/prompt 工具的身份），见 [monoFontFallback]。
 class AppTheme {
   // ---- 设计 token（自绘组件直接引用） ----
-  static const Color accent = Color(0xFF4F46E5); // indigo-600
-  static const Color accentTint = Color(0xFFEEF0FE); // 选中底色
-  static const Color ink = Color(0xFF23262B); // 主文字
-  static const Color inkSecondary = Color(0xFF878E98); // 次级文字
-  static const Color inkFaint = Color(0xFFB9BEC6); // 辅助/占位
-  static const Color canvas = Color(0xFFF6F6F4); // 页面底
+  static const Color accent = Color(0xFF4338CA); // indigo-700
+  static const Color accentTint = Color(0xFFE9ECFD); // 选中底色
+  static const Color ink = Color(0xFF16181C); // 主文字
+  static const Color inkSecondary = Color(0xFF565D68); // 次级文字（正文可读级）
+  static const Color inkFaint = Color(0xFF8E959E); // 辅助/占位
+  static const Color canvas = Color(0xFFF4F4F1); // 页面底
   static const Color surface = Colors.white; // 卡面
-  static const Color hairline = Color(0xFFE9E9E6); // 细线
+  static const Color hairline = Color(0xFFDEDEDA); // 细线
 
   /// 片段内容的等宽字体链（Windows 优先 Cascadia，兜底 Consolas）
   static const List<String> monoFontFallback = [
@@ -127,7 +127,7 @@ class AppTheme {
         titleMedium:
             TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: ink),
         bodyLarge: TextStyle(fontSize: 14, color: ink),
-        bodyMedium: TextStyle(fontSize: 13, color: Color(0xFF5A6068)),
+        bodyMedium: TextStyle(fontSize: 13, color: Color(0xFF3E444D)),
         bodySmall: TextStyle(fontSize: 12, color: inkSecondary),
       ),
       splashColor: Colors.transparent,

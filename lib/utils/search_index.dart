@@ -12,6 +12,9 @@ final _chinesePattern = RegExp(r'[一-鿿]');
 bool _hasChinese(String s) => _chinesePattern.hasMatch(s);
 
 /// 为一条片段构建检索串。字段之间用换行分隔，避免跨字段的误命中。
+///
+/// 内容（content）也参与检索——类似 shell 的 Ctrl+R，按命令正文就能搜到；
+/// 但内容不做拼音转换（可能是很长的 prompt，拼音串又大又慢且没有意义）。
 String buildSearchIndex(Snippet snippet) {
   final parts = <String>[snippet.name, snippet.description, ...snippet.tags];
   final buffer = StringBuffer();
@@ -27,6 +30,9 @@ String buildSearchIndex(Snippet snippet) {
       ).toLowerCase());
       buffer.writeln(PinyinHelper.getShortPinyin(part).toLowerCase());
     }
+  }
+  if (snippet.content.isNotEmpty) {
+    buffer.writeln(snippet.content.toLowerCase());
   }
   return buffer.toString();
 }

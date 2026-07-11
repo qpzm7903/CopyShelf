@@ -22,13 +22,44 @@ class SearchOverlay extends StatefulWidget {
 class _SearchOverlayState extends State<SearchOverlay> {
   final _searchController = TextEditingController();
   final _focusNode = FocusNode();
+  final _inputFocusNode = FocusNode();
   int _selectedIndex = 0;
   Hotkey _hotkey = Hotkey.defaultHotkey;
+
+  SnippetProvider? _provider;
+  bool _wasSearchVisible = false;
 
   @override
   void initState() {
     super.initState();
     _loadHotkey();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // 监听唤醒事件：每次呼出都要回到「立即可打字」状态
+    final provider = Provider.of<SnippetProvider>(context, listen: false);
+    if (!identical(provider, _provider)) {
+      _provider?.removeListener(_onProviderChanged);
+      _provider = provider;
+      _wasSearchVisible = provider.isSearchVisible;
+      provider.addListener(_onProviderChanged);
+    }
+  }
+
+  /// 呼出瞬间重置：清空上次的搜索词、选中第一条、焦点回到输入框。
+  /// 典型路径「唤醒 → 打关键词 → 回车」不需要任何额外按键。
+  void _onProviderChanged() {
+    final provider = _provider;
+    if (provider == null || !mounted) return;
+    final visible = provider.isSearchVisible;
+    if (visible && !_wasSearchVisible) {
+      _searchController.clear();
+      setState(() => _selectedIndex = 0);
+      _inputFocusNode.requestFocus();
+    }
+    _wasSearchVisible = visible;
   }
 
   Future<void> _loadHotkey() async {
@@ -41,8 +72,10 @@ class _SearchOverlayState extends State<SearchOverlay> {
 
   @override
   void dispose() {
+    _provider?.removeListener(_onProviderChanged);
     _searchController.dispose();
     _focusNode.dispose();
+    _inputFocusNode.dispose();
     super.dispose();
   }
 
@@ -123,10 +156,11 @@ class _SearchOverlayState extends State<SearchOverlay> {
           Expanded(
             child: TextField(
               controller: _searchController,
+              focusNode: _inputFocusNode,
               autofocus: true,
               style: const TextStyle(fontSize: 16, color: AppTheme.ink),
               decoration: const InputDecoration(
-                hintText: '搜索片段（支持拼音）',
+                hintText: '搜索名称、内容、标签，支持拼音',
                 hintStyle:
                     TextStyle(fontSize: 16, color: AppTheme.inkFaint),
                 filled: false,

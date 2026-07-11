@@ -424,6 +424,28 @@ void main() {
       expect(provider.filteredSnippets.length, 1);
     });
 
+    test('按内容正文搜索（Ctrl+R 语义）', () async {
+      await provider.addSnippet(
+          name: 'git amend', content: 'git commit --amend --no-edit');
+      await provider.addSnippet(name: 'git push', content: 'git push origin');
+
+      provider.setSearchQuery('--no-edit');
+
+      expect(provider.filteredSnippets.length, 1);
+      expect(provider.filteredSnippets[0].name, 'git amend');
+    });
+
+    test('内容不做拼音转换（长 prompt 不产生拼音误命中）', () async {
+      await provider.addSnippet(name: 'prompt', content: '请重构这段代码');
+
+      provider.setSearchQuery('重构');
+      expect(provider.filteredSnippets.length, 1);
+
+      // 内容的拼音不参与检索（名称/描述/标签的拼音才参与）
+      provider.setSearchQuery('zhonggou');
+      expect(provider.filteredSnippets, isEmpty);
+    });
+
     test('编辑片段后检索索引同步更新', () async {
       await provider.addSnippet(name: '回复话术', content: 'c');
       final id = provider.snippets[0].id;
