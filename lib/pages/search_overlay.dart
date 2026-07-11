@@ -82,6 +82,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
           child: Column(
             children: [
               _buildSearchBar(context, provider),
+              if (provider.notice != null) _buildNoticeBanner(provider.notice!),
               Expanded(
                 child: snippets.isEmpty
                     ? _buildEmptyState(provider)
@@ -118,6 +119,27 @@ class _SearchOverlayState extends State<SearchOverlay> {
           });
         },
         onSubmitted: (_) => _pasteSelected(provider),
+      ),
+    );
+  }
+
+  /// 粘贴降级提示（如目标窗口已关闭、内容仅复制到剪贴板）
+  Widget _buildNoticeBanner(String notice) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: const Color(0xFFFFF8E1),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, size: 14, color: Color(0xFFBF8F00)),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              notice,
+              style: const TextStyle(fontSize: 12, color: Color(0xFFBF8F00)),
+            ),
+          ),
+        ],
       ),
     );
   }

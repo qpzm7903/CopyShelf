@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # 02: 数据拆分——使用统计本地化（ADR-0001）
 
@@ -36,3 +36,7 @@ stats.json
 ## Blocked by
 
 - 01 (`01-rename-command-to-snippet.md`)
+
+## Comments
+
+- 2026-07-11: 完成于 commit 5976fa1。30 个测试全过；粘贴零 Git 操作、CRUD 恰一次 commit 均有测试覆盖。数据目录 .gitignore 由 ensureDataDir 自动写入。

@@ -1,37 +1,64 @@
 import 'dart:io' show Platform;
 import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
+import '../utils/constants.dart';
+import 'target_window_service.dart';
 import 'win32_paste.dart' as win32_paste;
+import 'win32_window.dart' as win32_window;
+
+/// 粘贴结果
+enum PasteOutcome {
+  /// 已写剪贴板并模拟 Ctrl+V 粘贴到目标窗口
+  pasted,
+
+  /// 仅写入剪贴板（非 Windows 平台的正常降级，静默）
+  copiedOnly,
+
+  /// 目标窗口已失效或粘贴按键未送达：内容在剪贴板里，需提示用户手动粘贴
+  targetLost,
+
+  /// 连剪贴板都没写进去
+  failed,
+}
 
 /// 粘贴服务
 ///
-/// 将片段内容写入系统剪贴板，并在 Windows 平台上模拟 Ctrl+V 按键，
-/// 把内容自动粘贴到前台窗口。
+/// 完整时序（见 PRD「粘贴链路」）：
+/// 1. 写入系统剪贴板；
+/// 2. 隐藏 CopyShelf 窗口；
+/// 3. 把前台焦点还给目标窗口（呼出快捷键时由 TargetWindowService 捕获）；
+/// 4. 短暂延迟等待焦点切换完成；
+/// 5. SendInput 模拟 Ctrl+V。
 ///
-/// Windows 实现使用 win32 包（纯 Dart 绑定）调用 User32 API：
-/// - 写入剪贴板通过 Flutter 内置 Clipboard API
-/// - 模拟 Ctrl+V 通过 win32 的 SendInput
+/// 明确的产品行为：粘贴会占据系统剪贴板，不恢复原有内容。
 class PasteService {
-  /// 将文本粘贴到当前活动窗口
-  ///
-  /// 返回 true 表示已写入剪贴板 + 模拟 Ctrl+V；
-  /// 返回 false 表示仅写入剪贴板（非 Windows 或模拟按键失败）。
-  static Future<bool> paste(String text) async {
-    bool copied = false;
+  /// 将文本粘贴到目标窗口。
+  static Future<PasteOutcome> paste(String text) async {
     try {
       await Clipboard.setData(ClipboardData(text: text));
-      copied = true;
     } catch (e) {
-      copied = false;
+      return PasteOutcome.failed;
     }
 
-    if (!copied) return false;
+    if (!Platform.isWindows) return PasteOutcome.copiedOnly;
 
-    if (!Platform.isWindows) return true;
+    final hwnd = TargetWindowService.handle;
+    if (hwnd == null || !win32_window.isValidWindow(hwnd)) {
+      return PasteOutcome.targetLost;
+    }
 
     try {
-      return win32_paste.simulateCtrlV();
+      await windowManager.hide();
+      if (!win32_window.focusWindow(hwnd)) {
+        return PasteOutcome.targetLost;
+      }
+      // 等待焦点切换完成后再发送按键
+      await Future.delayed(AppConstants.pasteFocusDelay);
+      return win32_paste.simulateCtrlV()
+          ? PasteOutcome.pasted
+          : PasteOutcome.targetLost;
     } catch (e) {
-      return false;
+      return PasteOutcome.targetLost;
     }
   }
 }

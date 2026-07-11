@@ -5,6 +5,7 @@ import 'package:copyshelf/models/snippet_stats.dart';
 import 'package:copyshelf/providers/snippet_provider.dart';
 import 'package:copyshelf/services/storage_service.dart';
 import 'package:copyshelf/services/git_service.dart';
+import 'package:copyshelf/services/paste_service.dart';
 
 /// Mock StorageService for testing
 class MockStorageService extends StorageService {
@@ -361,6 +362,79 @@ void main() {
     test('addSnippet with empty tags results in empty tags', () async {
       await provider.addSnippet(name: 'snip', content: 'c');
       expect(provider.snippets[0].tags, []);
+    });
+  });
+
+  group('SnippetProvider paste outcomes', () {
+    test('targetLost sets user-visible notice, stats still updated', () async {
+      final p = SnippetProvider(
+        storage: storage,
+        git: git,
+        paste: (_) async => PasteOutcome.targetLost,
+      );
+      await p.addSnippet(name: 'snip', content: 'c');
+
+      await p.useSnippet(p.snippets[0].id);
+
+      expect(p.notice, isNotNull);
+      expect(p.notice, contains('已复制'));
+      expect(p.statsFor(p.snippets[0].id).frequency, 1);
+    });
+
+    test('pasted leaves no notice', () async {
+      final p = SnippetProvider(
+        storage: storage,
+        git: git,
+        paste: (_) async => PasteOutcome.pasted,
+      );
+      await p.addSnippet(name: 'snip', content: 'c');
+
+      await p.useSnippet(p.snippets[0].id);
+
+      expect(p.notice, isNull);
+      expect(p.error, isNull);
+    });
+
+    test('copiedOnly (non-Windows) is silent', () async {
+      final p = SnippetProvider(
+        storage: storage,
+        git: git,
+        paste: (_) async => PasteOutcome.copiedOnly,
+      );
+      await p.addSnippet(name: 'snip', content: 'c');
+
+      await p.useSnippet(p.snippets[0].id);
+
+      expect(p.notice, isNull);
+      expect(p.error, isNull);
+    });
+
+    test('failed sets error', () async {
+      final p = SnippetProvider(
+        storage: storage,
+        git: git,
+        paste: (_) async => PasteOutcome.failed,
+      );
+      await p.addSnippet(name: 'snip', content: 'c');
+
+      await p.useSnippet(p.snippets[0].id);
+
+      expect(p.error, isNotNull);
+    });
+
+    test('showSearch clears previous notice', () async {
+      final p = SnippetProvider(
+        storage: storage,
+        git: git,
+        paste: (_) async => PasteOutcome.targetLost,
+      );
+      await p.addSnippet(name: 'snip', content: 'c');
+      await p.useSnippet(p.snippets[0].id);
+      expect(p.notice, isNotNull);
+
+      p.showSearch();
+
+      expect(p.notice, isNull);
     });
   });
 }

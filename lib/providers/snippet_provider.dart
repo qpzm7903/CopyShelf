@@ -11,9 +11,13 @@ import '../services/paste_service.dart';
 /// 管理片段定义的加载、搜索、排序、CRUD 和 Git 同步，
 /// 以及本机使用统计（不同步，见 ADR-0001）。
 /// 测试时可通过构造方法注入 mock 的 StorageService 和 GitService。
+/// 粘贴函数签名（测试时可注入 mock）
+typedef PasteFn = Future<PasteOutcome> Function(String text);
+
 class SnippetProvider extends ChangeNotifier {
   final StorageService _storage;
   final GitService _git;
+  final PasteFn _paste;
   final _uuid = Uuid();
 
   List<Snippet> _snippets = [];
@@ -22,13 +26,16 @@ class SnippetProvider extends ChangeNotifier {
   String _searchQuery = '';
   bool _isLoading = false;
   String? _error;
+  String? _notice;
   bool _isSearchVisible = false;
 
   SnippetProvider({
     StorageService? storage,
     GitService? git,
+    PasteFn? paste,
   })  : _storage = storage ?? (throw ArgumentError.notNull('storage')),
-        _git = git ?? (throw ArgumentError.notNull('git'));
+        _git = git ?? (throw ArgumentError.notNull('git')),
+        _paste = paste ?? PasteService.paste;
 
   // ========== Getters ==========
 
@@ -37,6 +44,9 @@ class SnippetProvider extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
   String? get error => _error;
+
+  /// 一次性提示信息（如粘贴降级为仅复制），下次呼出搜索框时清除
+  String? get notice => _notice;
   bool get isSearchVisible => _isSearchVisible;
 
   /// 某条片段在本机的使用统计（从未使用过返回 SnippetStats.zero）
@@ -128,7 +138,20 @@ class SnippetProvider extends ChangeNotifier {
     notifyListeners();
 
     // 粘贴到目标窗口
-    await PasteService.paste(_snippets[index].content);
+    final outcome = await _paste(_snippets[index].content);
+    switch (outcome) {
+      case PasteOutcome.pasted:
+      case PasteOutcome.copiedOnly:
+        break;
+      case PasteOutcome.targetLost:
+        _notice = '目标窗口已关闭，内容已复制到剪贴板，可手动 Ctrl+V 粘贴';
+        notifyListeners();
+        break;
+      case PasteOutcome.failed:
+        _error = '粘贴失败：无法写入剪贴板';
+        notifyListeners();
+        break;
+    }
 
     // 只持久化本地统计，不涉及 snippets.json 和 Git
     try {
@@ -217,6 +240,7 @@ class SnippetProvider extends ChangeNotifier {
   void showSearch() {
     _isSearchVisible = true;
     _searchQuery = '';
+    _notice = null;
     _applyFilter();
     notifyListeners();
   }

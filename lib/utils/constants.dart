@@ -12,6 +12,9 @@ class AppConstants {
   // 使用统计文件名（本地文件，不参与 Git 同步，见 ADR-0001）
   static const String statsFileName = 'stats.json';
 
+  // 粘贴：归还焦点后等待目标窗口就绪的延迟
+  static const Duration pasteFocusDelay = Duration(milliseconds: 50);
+
   // 快捷键
   static const String defaultHotkey = 'Ctrl+Alt+V';
   static const String prefKeyHotkey = 'hotkey';

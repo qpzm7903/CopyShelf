@@ -7,6 +7,7 @@ import 'providers/snippet_provider.dart';
 import 'services/storage_service.dart';
 import 'services/git_service.dart';
 import 'services/hotkey_service.dart';
+import 'services/target_window_service.dart';
 import 'theme/app_theme.dart';
 import 'pages/home_page.dart';
 import 'utils/constants.dart';
@@ -51,6 +52,8 @@ void main() async {
         if (await windowManager.isVisible()) {
           await windowManager.hide();
         } else {
+          // 必须在 show 之前捕获：show 之后前台窗口就是 CopyShelf 自己了
+          TargetWindowService.capture();
           await windowManager.show();
           await windowManager.focus();
           snippetProvider.showSearch();
