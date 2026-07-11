@@ -137,7 +137,9 @@ class StorageService {
   Future<void> saveSnippets(List<Snippet> snippets) async {
     final path = await _snippetsFilePath();
     final file = File(path);
-    final content = jsonEncode(snippets.map((c) => c.toJson()).toList());
+    // 多行缩进格式：每条片段占独立行段，git 才能对不同片段的并发编辑做行级合并
+    const encoder = JsonEncoder.withIndent('  ');
+    final content = encoder.convert(snippets.map((c) => c.toJson()).toList());
     await file.writeAsString(content);
   }
 

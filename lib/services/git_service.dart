@@ -8,10 +8,10 @@ import '../utils/constants.dart';
 ///
 /// 管理数据目录内的 Git 仓库操作：
 /// - 首次使用时自动 git init
-/// - 每次增删改片段后自动 commit
-/// - 每次 commit 后自动 push
+/// - 增删改片段后自动 commit，push 前先 pull --rebase
 /// - 应用启动时自动 pull --rebase
-/// - 冲突时反馈用户手动处理
+/// - 设置页可手动「立即同步」（pull）
+/// - 冲突时 rebase --abort 保持本地可用，反馈用户手动处理
 class GitService {
   static GitService? _instance;
 
@@ -35,6 +35,10 @@ class GitService {
     _initialized = true;
   }
 
+  /// 测试用：配合 SharedPreferences.setMockInitialValues 使用
+  @visibleForTesting
+  Future<void> ensureInitialized() => _init();
+
   SharedPreferences get _p {
     final p = _prefs;
     if (p == null) {
@@ -54,9 +58,17 @@ class GitService {
         stderrEncoding: utf8);
   }
 
+  /// 当前分支名（探测而非硬编码：git init 的默认分支因环境而异）
+  Future<String> _currentBranch(String dataDir) async {
+    final result = await _git(dataDir, ['rev-parse', '--abbrev-ref', 'HEAD']);
+    if (result.exitCode != 0) return 'master';
+    final branch = (result.stdout as String).trim();
+    return branch.isEmpty ? 'master' : branch;
+  }
+
   /// 初始化 Git 仓库（如果尚无 `.git`）
   Future<void> init(String dataDir) async {
-    final dotGit = Directory('$dataDir\\.git');
+    final dotGit = Directory('$dataDir${Platform.pathSeparator}.git');
     if (await dotGit.exists()) return;
 
     await _git(dataDir, ['init']);
@@ -66,7 +78,7 @@ class GitService {
 
     // 初始 commit
     await _git(dataDir, ['add', '-A']);
-    await _git(dataDir, ['commit', '-m', 'chore: init copyshelf']);
+    await _git(dataDir, ['commit', '-m', 'init copyshelf']);
   }
 
   /// 关联远程仓库
@@ -78,26 +90,33 @@ class GitService {
 
   /// 拉取远端变更（pull --rebase）
   ///
-  /// 返回 null 表示成功，返回非 null 字符串表示冲突信息。
+  /// 返回 null 表示成功（或无需拉取），非 null 为用户可读的错误信息。
+  /// 冲突时自动 rebase --abort，保证本地仓库仍可正常增删改（不阻塞本地编辑）。
   Future<String?> pull(String dataDir) async {
     if (_gitRemote == null) return null;
 
-    final result = await _git(dataDir, ['pull', '--rebase', 'origin', 'master']);
+    final branch = await _currentBranch(dataDir);
+    final result = await _git(dataDir, ['pull', '--rebase', 'origin', branch]);
     if (result.exitCode != 0) {
       final stderr = result.stderr as String? ?? '';
-      if (stderr.contains('conflict')) {
-        return 'Git 同步冲突：远端和本地有冲突，请手动解决后重启应用。\n\n$stderr';
-      }
-      // 如果只是没有远程分支，不算错误
-      if (stderr.contains('couldn\'t find remote ref')) {
+      final stdout = result.stdout as String? ?? '';
+      final output = '$stdout\n$stderr';
+      // 如果只是没有远程分支（远端还是空仓库），不算错误
+      if (output.contains("couldn't find remote ref")) {
         return null;
       }
-      return 'Git pull 失败：$stderr';
+      if (output.contains('conflict') || output.contains('CONFLICT')) {
+        // 中止 rebase，让本地保持可用状态（不阻塞本地编辑）
+        await _git(dataDir, ['rebase', '--abort']);
+        return 'Git 同步冲突：远端和本地修改了同一条片段。'
+            '本地编辑不受影响，请到数据目录手动解决后再同步：\n$dataDir';
+      }
+      return 'Git pull 失败：${stderr.trim()}';
     }
     return null;
   }
 
-  /// 提交并推送本地变更
+  /// 提交并推送本地变更（push 前先 pull --rebase）
   ///
   /// 返回 null 表示成功，返回非 null 字符串表示错误信息。
   Future<String?> commitAndPush(String dataDir, String message) async {
@@ -106,22 +125,21 @@ class GitService {
 
       // 检查是否有变更需要 commit
       final status = await _git(dataDir, ['status', '--porcelain']);
-      if ((status.stdout as String).trim().isEmpty) {
-        return null; // 无变更，无需 commit
+      if ((status.stdout as String).trim().isNotEmpty) {
+        await _git(dataDir, ['commit', '-m', message]);
       }
 
-      var result = await _git(dataDir, ['commit', '-m', message]);
-      if (result.exitCode != 0 && !(result.stderr as String).contains('nothing to commit')) {
-        // commit 失败但不阻塞
-      }
+      if (_gitRemote == null) return null;
 
-      // push
-      if (_gitRemote != null) {
-        result = await _git(dataDir, ['push', 'origin', 'master']);
-        if (result.exitCode != 0) {
-          final stderr = result.stderr as String? ?? '';
-          return 'Git push 失败：$stderr';
-        }
+      // push 前先拉取远端，避免 non-fast-forward 被拒
+      final pullError = await pull(dataDir);
+      if (pullError != null) return pullError;
+
+      final branch = await _currentBranch(dataDir);
+      final result = await _git(dataDir, ['push', 'origin', branch]);
+      if (result.exitCode != 0) {
+        final stderr = result.stderr as String? ?? '';
+        return 'Git push 失败：${stderr.trim()}';
       }
 
       return null;
@@ -136,6 +154,6 @@ class GitService {
     if (pullError != null) return pullError;
 
     // 拉取后可能已合并远端变更，推送本地提交
-    return commitAndPush(dataDir, 'chore: sync on startup');
+    return commitAndPush(dataDir, 'sync on startup');
   }
 }

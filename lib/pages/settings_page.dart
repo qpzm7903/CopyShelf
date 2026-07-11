@@ -26,6 +26,7 @@ class _SettingsPageState extends State<SettingsPage> {
   final _dataDirController = TextEditingController();
 
   bool _isEditing = false;
+  bool _isSyncing = false;
   String? _editingId;
   List<String> _tempTags = [];
 
@@ -77,6 +78,37 @@ class _SettingsPageState extends State<SettingsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Git 远程地址已保存')),
     );
+  }
+
+  /// 手动「立即同步」：拉取远端变更，失败时弹窗提示（冲突不阻塞本地编辑）
+  Future<void> _syncNow() async {
+    final provider = context.read<SnippetProvider>();
+    setState(() => _isSyncing = true);
+
+    final success = await provider.syncNow();
+
+    if (!mounted) return;
+    setState(() => _isSyncing = false);
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('同步完成，片段列表已刷新')),
+      );
+    } else {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('同步失败'),
+          content: Text(provider.error ?? '未知错误'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('知道了'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
   void _startAdd() {
@@ -271,8 +303,23 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            '设置后每次增删改片段自动 commit & push，启动时自动 pull。',
+            '设置后每次增删改片段自动 commit & push（push 前自动 pull --rebase），启动时自动 pull。',
             style: TextStyle(fontSize: 12, color: Colors.grey[400]),
+          ),
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _isSyncing ? null : _syncNow,
+              icon: _isSyncing
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.sync, size: 16),
+              label: Text(_isSyncing ? '同步中…' : '立即同步'),
+            ),
           ),
 
           const SizedBox(height: 32),

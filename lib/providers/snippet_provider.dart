@@ -90,6 +90,29 @@ class SnippetProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 手动「立即同步」：拉取远端变更并重新加载片段列表。
+  ///
+  /// 返回 true 表示同步成功；失败时错误信息写入 [error]。
+  Future<bool> syncNow() async {
+    _error = null;
+    notifyListeners();
+    try {
+      final dataDir = await _storage.getDataDirPath();
+      final pullError = await _git.pull(dataDir);
+      if (pullError != null) {
+        _error = pullError;
+        notifyListeners();
+        return false;
+      }
+      await loadSnippets();
+      return true;
+    } catch (e) {
+      _error = '同步失败: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
   // ========== 搜索 ==========
 
   void setSearchQuery(String query) {
