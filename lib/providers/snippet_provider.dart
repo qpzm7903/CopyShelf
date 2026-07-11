@@ -154,14 +154,25 @@ class SnippetProvider extends ChangeNotifier {
   // ========== 排序 ==========
 
   void _sortSnippets() {
+    final now = DateTime.now();
+    // 每轮排序前算好各片段得分，避免 sort 比较器里重复计算
+    final scores = {
+      for (final s in _filteredSnippets) s.id: statsFor(s.id).frecencyScore(now),
+    };
     _filteredSnippets.sort((a, b) {
+      // frecency 降序：近期使用权重高，随时间指数衰减
+      final scoreCmp = scores[b.id]!.compareTo(scores[a.id]!);
+      if (scoreCmp != 0) return scoreCmp;
       final statsA = statsFor(a.id);
       final statsB = statsFor(b.id);
-      // 先按本机使用频率降序
+      // 同分按累计频次降序
       final freqCmp = statsB.frequency.compareTo(statsA.frequency);
       if (freqCmp != 0) return freqCmp;
       // 再按最近使用时间降序
-      return statsB.lastUsedAt.compareTo(statsA.lastUsedAt);
+      final timeCmp = statsB.lastUsedAt.compareTo(statsA.lastUsedAt);
+      if (timeCmp != 0) return timeCmp;
+      // 全都没用过：按名称字典序，保证稳定可预期
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
   }
 
