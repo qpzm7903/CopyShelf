@@ -79,10 +79,27 @@ class _SearchOverlayState extends State<SearchOverlay> {
     super.dispose();
   }
 
+  /// Alt+1..9 对应的数字键 → 列表序号（1 起）
+  static final Map<LogicalKeyboardKey, int> _digitKeys = {
+    for (var i = 1; i <= 9; i++)
+      LogicalKeyboardKey(LogicalKeyboardKey.digit1.keyId + i - 1): i,
+  };
+
   KeyEventResult _handleKeyEvent(KeyEvent event, SnippetProvider provider) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     final count = provider.filteredSnippets.length;
+
+    // Alt+1..9：直达粘贴列表第 N 项
+    if (HardwareKeyboard.instance.isAltPressed) {
+      final number = _digitKeys[event.logicalKey];
+      if (number != null) {
+        if (number <= count) {
+          _pasteAt(provider, number - 1);
+        }
+        return KeyEventResult.handled;
+      }
+    }
     if (event.logicalKey == LogicalKeyboardKey.arrowDown && count > 0) {
       setState(() => _selectedIndex = (_selectedIndex + 1) % count);
       return KeyEventResult.handled;
@@ -103,9 +120,13 @@ class _SearchOverlayState extends State<SearchOverlay> {
   }
 
   void _pasteSelected(SnippetProvider provider) {
-    if (provider.filteredSnippets.isEmpty) return;
-    final snippet = provider.filteredSnippets[_selectedIndex];
-    provider.useSnippet(snippet.id);
+    _pasteAt(provider, _selectedIndex);
+  }
+
+  void _pasteAt(SnippetProvider provider, int index) {
+    final snippets = provider.filteredSnippets;
+    if (index < 0 || index >= snippets.length) return;
+    provider.useSnippet(snippets[index].id);
     provider.hideSearch();
   }
 
@@ -195,6 +216,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
           return _SnippetRow(
             snippet: snippet,
             frequency: provider.statsFor(snippet.id).frequency,
+            shortcutNumber: index < 9 ? index + 1 : null,
             isSelected: index == _selectedIndex,
             onTap: () {
               provider.useSnippet(snippet.id);
@@ -299,6 +321,9 @@ class _FooterLabel extends StatelessWidget {
 class _SnippetRow extends StatelessWidget {
   final Snippet snippet;
   final int frequency;
+
+  /// Alt+N 直达序号（1..9）；列表第 10 项起为 null 不显示角标
+  final int? shortcutNumber;
   final bool isSelected;
   final VoidCallback onTap;
   final VoidCallback onHover;
@@ -306,6 +331,7 @@ class _SnippetRow extends StatelessWidget {
   const _SnippetRow({
     required this.snippet,
     required this.frequency,
+    this.shortcutNumber,
     required this.isSelected,
     required this.onTap,
     required this.onHover,
@@ -335,6 +361,33 @@ class _SnippetRow extends StatelessWidget {
             children: [
               Row(
                 children: [
+                  if (shortcutNumber != null) ...[
+                    Container(
+                      key: Key('shortcut-badge-$shortcutNumber'),
+                      width: 16,
+                      height: 16,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppTheme.accent : AppTheme.canvas,
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(
+                            color: isSelected
+                                ? AppTheme.accent
+                                : AppTheme.hairline,
+                            width: 0.5),
+                      ),
+                      child: Text(
+                        '$shortcutNumber',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color:
+                              isSelected ? Colors.white : AppTheme.inkFaint,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: Text(
                       snippet.name,
