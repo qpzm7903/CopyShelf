@@ -1,13 +1,13 @@
-/// 片段数据模型
-
+/// 片段定义数据模型
+///
+/// 只包含跨设备同步的定义部分（见 ADR-0001）。
+/// 使用统计（frequency/lastUsedAt）在 SnippetStats 中，本地存储、不同步。
 class Snippet {
   final String id;
-  String name;
-  String content;
-  String description;
-  List<String> tags;
-  int frequency;
-  DateTime lastUsedAt;
+  final String name;
+  final String content;
+  final String description;
+  final List<String> tags;
   final DateTime createdAt;
 
   Snippet({
@@ -16,11 +16,8 @@ class Snippet {
     required this.content,
     this.description = '',
     List<String>? tags,
-    this.frequency = 0,
-    DateTime? lastUsedAt,
     DateTime? createdAt,
-  })  : tags = tags ?? [],
-        lastUsedAt = lastUsedAt ?? DateTime.now(),
+  })  : tags = List.unmodifiable(tags ?? const []),
         createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
@@ -29,11 +26,10 @@ class Snippet {
         'content': content,
         'description': description,
         'tags': tags,
-        'frequency': frequency,
-        'lastUsedAt': lastUsedAt.toIso8601String(),
         'createdAt': createdAt.toIso8601String(),
       };
 
+  /// 旧版数据文件中的 frequency/lastUsedAt 字段直接忽略。
   factory Snippet.fromJson(Map<String, dynamic> json) {
     return Snippet(
       id: json['id'] as String,
@@ -44,10 +40,6 @@ class Snippet {
               ?.map((e) => e as String)
               .toList() ??
           [],
-      frequency: json['frequency'] as int? ?? 0,
-      lastUsedAt: json['lastUsedAt'] != null
-          ? DateTime.parse(json['lastUsedAt'] as String)
-          : null,
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String)
           : null,
@@ -66,8 +58,6 @@ class Snippet {
       content: content ?? this.content,
       description: description ?? this.description,
       tags: tags ?? List.from(this.tags),
-      frequency: frequency,
-      lastUsedAt: lastUsedAt,
       createdAt: createdAt,
     );
   }

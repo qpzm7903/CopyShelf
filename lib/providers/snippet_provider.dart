@@ -1,13 +1,15 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/snippet.dart';
+import '../models/snippet_stats.dart';
 import '../services/storage_service.dart';
 import '../services/git_service.dart';
 import '../services/paste_service.dart';
 
 /// 片段状态管理
 ///
-/// 管理片段的加载、搜索、排序、CRUD 和 Git 同步。
+/// 管理片段定义的加载、搜索、排序、CRUD 和 Git 同步，
+/// 以及本机使用统计（不同步，见 ADR-0001）。
 /// 测试时可通过构造方法注入 mock 的 StorageService 和 GitService。
 class SnippetProvider extends ChangeNotifier {
   final StorageService _storage;
@@ -16,6 +18,7 @@ class SnippetProvider extends ChangeNotifier {
 
   List<Snippet> _snippets = [];
   List<Snippet> _filteredSnippets = [];
+  Map<String, SnippetStats> _stats = {};
   String _searchQuery = '';
   bool _isLoading = false;
   String? _error;
@@ -36,12 +39,15 @@ class SnippetProvider extends ChangeNotifier {
   String? get error => _error;
   bool get isSearchVisible => _isSearchVisible;
 
+  /// 某条片段在本机的使用统计（从未使用过返回 SnippetStats.zero）
+  SnippetStats statsFor(String id) => _stats[id] ?? SnippetStats.zero;
+
   // ========== 初始化 ==========
 
-  /// 加载片段（不执行 Git 同步，供外部管理初始化流程时使用）
+  /// 加载片段定义与本机使用统计（不执行 Git 同步）
   Future<void> loadSnippets() async {
     _snippets = await _storage.loadSnippets();
-    _sortSnippets();
+    _stats = await _storage.loadStats();
     _applyFilter();
     notifyListeners();
   }
@@ -100,31 +106,37 @@ class SnippetProvider extends ChangeNotifier {
 
   void _sortSnippets() {
     _filteredSnippets.sort((a, b) {
-      // 先按频率降序
-      final freqCmp = b.frequency.compareTo(a.frequency);
+      final statsA = statsFor(a.id);
+      final statsB = statsFor(b.id);
+      // 先按本机使用频率降序
+      final freqCmp = statsB.frequency.compareTo(statsA.frequency);
       if (freqCmp != 0) return freqCmp;
       // 再按最近使用时间降序
-      return b.lastUsedAt.compareTo(a.lastUsedAt);
+      return statsB.lastUsedAt.compareTo(statsA.lastUsedAt);
     });
   }
 
-  // ========== 粘贴（记录使用次数） ==========
+  // ========== 粘贴（记录本机使用统计，不触发 Git） ==========
 
-  /// 记录片段被使用一次，并同步到 Git
+  /// 记录片段被使用一次并粘贴。只写本地统计文件（ADR-0001）。
   Future<void> useSnippet(String id) async {
-    final index = _snippets.indexWhere((c) => c.id == id);
+    final index = _snippets.indexWhere((s) => s.id == id);
     if (index == -1) return;
 
-    _snippets[index].frequency++;
-    _snippets[index].lastUsedAt = DateTime.now();
+    _stats = {..._stats, id: statsFor(id).used(DateTime.now())};
     _applyFilter();
     notifyListeners();
 
-    // 粘贴到前台窗口
+    // 粘贴到目标窗口
     await PasteService.paste(_snippets[index].content);
 
-    // 持久化 + Git 同步
-    await _persistAndSync('feat: use snippet');
+    // 只持久化本地统计，不涉及 snippets.json 和 Git
+    try {
+      await _storage.saveStats(_stats);
+    } catch (e) {
+      _error = '保存使用统计失败: $e';
+      notifyListeners();
+    }
   }
 
   // ========== CRUD ==========
@@ -144,11 +156,11 @@ class SnippetProvider extends ChangeNotifier {
       tags: tags,
     );
 
-    _snippets.add(snippet);
+    _snippets = [..._snippets, snippet];
     _applyFilter();
     notifyListeners();
 
-    await _persistAndSync('feat: add snippet "${snippet.name}"');
+    await _persistAndSync('add snippet "${snippet.name}"');
   }
 
   /// 编辑片段
@@ -159,29 +171,45 @@ class SnippetProvider extends ChangeNotifier {
     String description = '',
     List<String>? tags,
   }) async {
-    final index = _snippets.indexWhere((c) => c.id == id);
+    final index = _snippets.indexWhere((s) => s.id == id);
     if (index == -1) return;
 
-    _snippets[index] = _snippets[index].copyWith(
+    final updated = _snippets[index].copyWith(
       name: name,
       content: content,
       description: description,
       tags: tags,
     );
+    _snippets = [
+      ..._snippets.sublist(0, index),
+      updated,
+      ..._snippets.sublist(index + 1),
+    ];
     _applyFilter();
     notifyListeners();
 
-    await _persistAndSync('feat: update snippet "${name}"');
+    await _persistAndSync('update snippet "$name"');
   }
 
-  /// 删除片段
+  /// 删除片段（同时清理本机统计）
   Future<void> deleteSnippet(String id) async {
-    final snippet = _snippets.firstWhere((c) => c.id == id);
-    _snippets.removeWhere((c) => c.id == id);
+    final index = _snippets.indexWhere((s) => s.id == id);
+    if (index == -1) return;
+
+    final snippet = _snippets[index];
+    _snippets = _snippets.where((s) => s.id != id).toList();
+    if (_stats.containsKey(id)) {
+      _stats = {..._stats}..remove(id);
+      try {
+        await _storage.saveStats(_stats);
+      } catch (e) {
+        // 统计清理失败不阻塞删除本身
+      }
+    }
     _applyFilter();
     notifyListeners();
 
-    await _persistAndSync('feat: delete snippet "${snippet.name}"');
+    await _persistAndSync('delete snippet "${snippet.name}"');
   }
 
   // ========== 搜索框显隐 ==========

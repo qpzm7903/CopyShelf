@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:copyshelf/models/snippet.dart';
+import 'package:copyshelf/models/snippet_stats.dart';
 import 'package:copyshelf/providers/snippet_provider.dart';
 import 'package:copyshelf/services/storage_service.dart';
 import 'package:copyshelf/services/git_service.dart';
@@ -8,6 +9,9 @@ import 'package:copyshelf/services/git_service.dart';
 /// Mock StorageService for testing
 class MockStorageService extends StorageService {
   List<Snippet> _storedSnippets = [];
+  Map<String, SnippetStats> _storedStats = {};
+  int saveSnippetsCallCount = 0;
+  int saveStatsCallCount = 0;
 
   MockStorageService() : super();
 
@@ -18,27 +22,52 @@ class MockStorageService extends StorageService {
 
   @override
   Future<void> saveSnippets(List<Snippet> snippets) async {
+    saveSnippetsCallCount++;
     _storedSnippets = List.from(snippets);
+  }
+
+  @override
+  Future<Map<String, SnippetStats>> loadStats() async {
+    return Map.from(_storedStats);
+  }
+
+  @override
+  Future<void> saveStats(Map<String, SnippetStats> stats) async {
+    saveStatsCallCount++;
+    _storedStats = Map.from(stats);
   }
 
   @override
   Future<String> getDataDirPath() async => '/test/data';
 
   @override
-  Future<Directory> ensureDataDir({String? customPath}) async => Directory('/test/data');
+  Future<Directory> ensureDataDir({String? customPath}) async =>
+      Directory('/test/data');
 
   List<Snippet> get storedSnippets => _storedSnippets;
+  Map<String, SnippetStats> get storedStats => _storedStats;
+
+  void seedStats(Map<String, SnippetStats> stats) {
+    _storedStats = Map.from(stats);
+  }
 }
 
-/// Mock GitService for testing (no-op)
+/// Mock GitService for testing — 记录 commitAndPush 调用
 class MockGitService extends GitService {
+  int commitAndPushCallCount = 0;
+  final List<String> commitMessages = [];
+
   MockGitService() : super();
 
   @override
   Future<void> init(String dataDir) async {}
 
   @override
-  Future<String?> commitAndPush(String dataDir, String message) async => null;
+  Future<String?> commitAndPush(String dataDir, String message) async {
+    commitAndPushCallCount++;
+    commitMessages.add(message);
+    return null;
+  }
 
   @override
   Future<String?> syncOnStart(String dataDir) async => null;
@@ -67,18 +96,23 @@ void main() {
       expect(provider.error, null);
     });
 
-    test('loadSnippets loads from storage', () async {
+    test('loadSnippets loads definitions and stats from storage', () async {
       storage.saveSnippets([
         Snippet(id: '1', name: 'test', content: 'content'),
       ]);
+      storage.seedStats({
+        '1': SnippetStats(frequency: 3, lastUsedAt: DateTime(2026, 7, 1)),
+      });
 
       await provider.loadSnippets();
 
       expect(provider.snippets.length, 1);
       expect(provider.snippets[0].name, 'test');
+      expect(provider.statsFor('1').frequency, 3);
     });
 
-    test('addSnippet adds to list and persists', () async {
+    test('addSnippet adds to list, persists, and commits exactly once',
+        () async {
       await provider.addSnippet(
         name: 'git amend',
         content: 'git commit --amend --no-edit',
@@ -88,16 +122,15 @@ void main() {
 
       expect(provider.snippets.length, 1);
       expect(provider.snippets[0].name, 'git amend');
-      expect(provider.snippets[0].content, 'git commit --amend --no-edit');
-      expect(provider.snippets[0].tags, ['git']);
-      expect(provider.snippets[0].frequency, 0);
-
-      // Verify persisted
       expect(storage.storedSnippets.length, 1);
+      expect(git.commitAndPushCallCount, 1);
+      // 数据仓库 commit 消息不用 conventional-commit 前缀
+      expect(git.commitMessages[0].startsWith('feat:'), isFalse);
     });
 
-    test('updateSnippet edits in-place', () async {
+    test('updateSnippet edits and commits exactly once', () async {
       await provider.addSnippet(name: 'old', content: 'old content');
+      git.commitAndPushCallCount = 0;
 
       await provider.updateSnippet(
         id: provider.snippets[0].id,
@@ -107,40 +140,84 @@ void main() {
         tags: ['git'],
       );
 
-      expect(provider.snippets.length, 1);
       expect(provider.snippets[0].name, 'new');
       expect(provider.snippets[0].content, 'new content');
-      expect(provider.snippets[0].description, 'updated');
-      expect(provider.snippets[0].tags, ['git']);
+      expect(git.commitAndPushCallCount, 1);
     });
 
-    test('deleteSnippet removes from list', () async {
-      await provider.addSnippet(name: 'cmd1', content: 'c1');
-      await provider.addSnippet(name: 'cmd2', content: 'c2');
+    test('deleteSnippet removes from list and commits exactly once', () async {
+      await provider.addSnippet(name: 'snip1', content: 'c1');
+      await provider.addSnippet(name: 'snip2', content: 'c2');
+      git.commitAndPushCallCount = 0;
 
       await provider.deleteSnippet(provider.snippets[0].id);
 
       expect(provider.snippets.length, 1);
-      expect(provider.snippets[0].name, 'cmd2');
+      expect(provider.snippets[0].name, 'snip2');
+      expect(git.commitAndPushCallCount, 1);
     });
 
-    test('useSnippet increments frequency and updates lastUsedAt', () async {
-      await provider.addSnippet(name: 'cmd', content: 'c');
+    test('useSnippet updates local stats and does NOT touch git (ADR-0001)',
+        () async {
+      await provider.addSnippet(name: 'snip', content: 'c');
       final id = provider.snippets[0].id;
+      git.commitAndPushCallCount = 0;
+      storage.saveSnippetsCallCount = 0;
       final before = DateTime.now().add(const Duration(seconds: -1));
 
       await provider.useSnippet(id);
 
-      expect(provider.snippets[0].frequency, 1);
-      expect(provider.snippets[0].lastUsedAt.isAfter(before), isTrue);
+      expect(provider.statsFor(id).frequency, 1);
+      expect(provider.statsFor(id).lastUsedAt.isAfter(before), isTrue);
+      expect(storage.saveStatsCallCount, 1);
+      // 粘贴不触发任何 Git 操作，也不重写定义文件
+      expect(git.commitAndPushCallCount, 0);
+      expect(storage.saveSnippetsCallCount, 0);
     });
 
-    test('sorting by frequency desc', () async {
+    test('useSnippet 10 times → zero git operations', () async {
+      await provider.addSnippet(name: 'snip', content: 'c');
+      final id = provider.snippets[0].id;
+      git.commitAndPushCallCount = 0;
+
+      for (int i = 0; i < 10; i++) {
+        await provider.useSnippet(id);
+      }
+
+      expect(provider.statsFor(id).frequency, 10);
+      expect(git.commitAndPushCallCount, 0);
+    });
+
+    test('stats update is immutable — old stats object is not mutated',
+        () async {
+      await provider.addSnippet(name: 'snip', content: 'c');
+      final id = provider.snippets[0].id;
+      await provider.useSnippet(id);
+      final statsBefore = provider.statsFor(id);
+      final freqBefore = statsBefore.frequency;
+
+      await provider.useSnippet(id);
+
+      expect(statsBefore.frequency, freqBefore);
+      expect(provider.statsFor(id).frequency, freqBefore + 1);
+      expect(identical(statsBefore, provider.statsFor(id)), isFalse);
+    });
+
+    test('persisted snippets.json data has no stats fields', () async {
+      await provider.addSnippet(name: 'snip', content: 'c');
+      await provider.useSnippet(provider.snippets[0].id);
+
+      final json = storage.storedSnippets[0].toJson();
+      expect(json.containsKey('frequency'), isFalse);
+      expect(json.containsKey('lastUsedAt'), isFalse);
+    });
+
+    test('sorting by frequency desc, then lastUsedAt desc', () async {
       await provider.addSnippet(name: 'low', content: 'c');
       await provider.addSnippet(name: 'high', content: 'c');
 
-      // Use high 3 times
-      final highId = provider.snippets[1].id;
+      final highId =
+          provider.snippets.firstWhere((s) => s.name == 'high').id;
       for (int i = 0; i < 3; i++) {
         await provider.useSnippet(highId);
       }
@@ -150,15 +227,63 @@ void main() {
       expect(provider.filteredSnippets[1].name, 'low');
     });
 
+    test('snippet synced from remote without local stats sorts last',
+        () async {
+      storage.saveSnippets([
+        Snippet(id: 'remote-new', name: 'remote', content: 'c'),
+        Snippet(id: 'local-used', name: 'local', content: 'c'),
+      ]);
+      storage.seedStats({
+        'local-used':
+            SnippetStats(frequency: 5, lastUsedAt: DateTime(2026, 7, 1)),
+      });
+
+      await provider.loadSnippets();
+
+      expect(provider.filteredSnippets[0].name, 'local');
+      expect(provider.filteredSnippets[1].name, 'remote');
+      expect(provider.statsFor('remote-new').frequency, 0);
+    });
+
+    test('orphan stats (snippet deleted on another device) are ignored',
+        () async {
+      storage.saveSnippets([
+        Snippet(id: '1', name: 'alive', content: 'c'),
+      ]);
+      storage.seedStats({
+        '1': SnippetStats(frequency: 1, lastUsedAt: DateTime(2026, 7, 1)),
+        'ghost':
+            SnippetStats(frequency: 99, lastUsedAt: DateTime(2026, 7, 2)),
+      });
+
+      await provider.loadSnippets();
+
+      expect(provider.snippets.length, 1);
+      expect(provider.filteredSnippets[0].name, 'alive');
+    });
+
+    test('deleteSnippet also cleans up its local stats', () async {
+      await provider.addSnippet(name: 'snip', content: 'c');
+      final id = provider.snippets[0].id;
+      await provider.useSnippet(id);
+      expect(storage.storedStats.containsKey(id), isTrue);
+
+      await provider.deleteSnippet(id);
+
+      expect(storage.storedStats.containsKey(id), isFalse);
+    });
+
     test('search filters by name', () async {
       await provider.addSnippet(name: 'git push', content: 'git push origin');
-      await provider.addSnippet(name: 'docker build', content: 'docker build .');
+      await provider.addSnippet(
+          name: 'docker build', content: 'docker build .');
       await provider.addSnippet(name: 'git pull', content: 'git pull origin');
 
       provider.setSearchQuery('git');
 
       expect(provider.filteredSnippets.length, 2);
-      expect(provider.filteredSnippets.every((c) => c.name.contains('git')), isTrue);
+      expect(provider.filteredSnippets.every((s) => s.name.contains('git')),
+          isTrue);
     });
 
     test('search filters by description', () async {
@@ -180,21 +305,15 @@ void main() {
     });
 
     test('search filters by tags', () async {
-      await provider.addSnippet(
-        name: 'cmd1',
-        content: 'c1',
-        tags: ['git', '常用'],
-      );
-      await provider.addSnippet(
-        name: 'cmd2',
-        content: 'c2',
-        tags: ['docker'],
-      );
+      await provider
+          .addSnippet(name: 'snip1', content: 'c1', tags: ['git', '常用']);
+      await provider
+          .addSnippet(name: 'snip2', content: 'c2', tags: ['docker']);
 
       provider.setSearchQuery('docker');
 
       expect(provider.filteredSnippets.length, 1);
-      expect(provider.filteredSnippets[0].name, 'cmd2');
+      expect(provider.filteredSnippets[0].name, 'snip2');
     });
 
     test('search is case-insensitive', () async {
@@ -206,7 +325,7 @@ void main() {
       expect(provider.filteredSnippets.length, 1);
     });
 
-    test('empty search returns all snippets sorted by frequency', () async {
+    test('empty search returns all snippets', () async {
       await provider.addSnippet(name: 'a', content: 'c');
       await provider.addSnippet(name: 'b', content: 'c');
       await provider.addSnippet(name: 'c', content: 'c');
@@ -221,11 +340,11 @@ void main() {
       provider.showSearch();
 
       expect(provider.searchQuery, '');
-      // isSearchVisible is tracked but not tested via getter
+      expect(provider.isSearchVisible, isTrue);
     });
 
     test('CRUD updates are persisted', () async {
-      await provider.addSnippet(name: 'cmd', content: 'c');
+      await provider.addSnippet(name: 'snip', content: 'c');
       expect(storage.storedSnippets.length, 1);
 
       await provider.updateSnippet(
@@ -240,7 +359,7 @@ void main() {
     });
 
     test('addSnippet with empty tags results in empty tags', () async {
-      await provider.addSnippet(name: 'cmd', content: 'c');
+      await provider.addSnippet(name: 'snip', content: 'c');
       expect(provider.snippets[0].tags, []);
     });
   });

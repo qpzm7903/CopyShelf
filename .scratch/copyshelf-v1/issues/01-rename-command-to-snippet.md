@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # 01: 全库更名 Command → Snippet（prefactor）
 
@@ -25,3 +25,7 @@ Status: ready-for-agent
 ## Blocked by
 
 None - can start immediately
+
+## Comments
+
+- 2026-07-11: 完成于 commit 641d44e。flutter analyze 与更名前基线一致（11 条遗留 info/warning），20 个测试全过。

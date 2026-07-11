@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/snippet.dart';
+import '../models/snippet_stats.dart';
 import '../utils/constants.dart';
 
 /// 本地存储服务
@@ -91,7 +91,25 @@ class StorageService {
     if (!await file.exists()) {
       await file.writeAsString('[]');
     }
+    // 确保 .gitignore 排除本地统计文件（ADR-0001：使用统计不同步）
+    await _ensureStatsIgnored(dir);
     return dir;
+  }
+
+  /// 把 stats.json 写进数据目录的 .gitignore（不存在则创建，存在但缺行则追加）
+  Future<void> _ensureStatsIgnored(Directory dir) async {
+    final gitignore = File('${dir.path}\\.gitignore');
+    const statsLine = AppConstants.statsFileName;
+    if (!await gitignore.exists()) {
+      await gitignore.writeAsString('$statsLine\n');
+      return;
+    }
+    final content = await gitignore.readAsString();
+    final lines = content.split('\n').map((l) => l.trim());
+    if (!lines.contains(statsLine)) {
+      final separator = content.isEmpty || content.endsWith('\n') ? '' : '\n';
+      await gitignore.writeAsString('$content$separator$statsLine\n');
+    }
   }
 
   // ========== 片段 CRUD ==========
@@ -120,6 +138,36 @@ class StorageService {
     final path = await _snippetsFilePath();
     final file = File(path);
     final content = jsonEncode(snippets.map((c) => c.toJson()).toList());
+    await file.writeAsString(content);
+  }
+
+  // ========== 使用统计（本地文件，不同步，ADR-0001） ==========
+
+  Future<String> _statsFilePath() async {
+    final dir = await getDataDirPath();
+    return '$dir\\${AppConstants.statsFileName}';
+  }
+
+  Future<Map<String, SnippetStats>> loadStats() async {
+    final path = await _statsFilePath();
+    final file = File(path);
+    if (!await file.exists()) return {};
+    try {
+      final content = await file.readAsString();
+      final map = jsonDecode(content) as Map<String, dynamic>;
+      return map.map((id, json) => MapEntry(
+          id, SnippetStats.fromJson(json as Map<String, dynamic>)));
+    } catch (e) {
+      // 统计文件损坏不致命：丢弃统计，从零开始
+      return {};
+    }
+  }
+
+  Future<void> saveStats(Map<String, SnippetStats> stats) async {
+    final path = await _statsFilePath();
+    final file = File(path);
+    final content =
+        jsonEncode(stats.map((id, s) => MapEntry(id, s.toJson())));
     await file.writeAsString(content);
   }
 }

@@ -163,7 +163,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
                     ),
               const SizedBox(width: 8),
               Text(
-                '${snippet.frequency}',
+                '${provider.statsFor(snippet.id).frequency}',
                 style: const TextStyle(
                   fontSize: 11,
                   color: Color(0xFFCCCCCC),

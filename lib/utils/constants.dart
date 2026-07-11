@@ -9,6 +9,8 @@ class AppConstants {
 
   // 数据文件名
   static const String snippetsFileName = 'snippets.json';
+  // 使用统计文件名（本地文件，不参与 Git 同步，见 ADR-0001）
+  static const String statsFileName = 'stats.json';
 
   // 快捷键
   static const String defaultHotkey = 'Ctrl+Alt+V';
