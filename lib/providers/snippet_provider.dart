@@ -53,6 +53,16 @@ class SnippetProvider extends ChangeNotifier {
   String? get notice => _notice;
   bool get isSearchVisible => _isSearchVisible;
 
+  /// 全局快捷键注册失败信息；null 表示注册正常
+  String? get hotkeyError => _hotkeyError;
+  String? _hotkeyError;
+
+  /// 更新快捷键注册状态（注册成功传 null 清除错误）
+  void setHotkeyError(String? message) {
+    _hotkeyError = message;
+    notifyListeners();
+  }
+
   /// 某条片段在本机的使用统计（从未使用过返回 SnippetStats.zero）
   SnippetStats statsFor(String id) => _stats[id] ?? SnippetStats.zero;
 

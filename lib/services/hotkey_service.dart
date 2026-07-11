@@ -5,11 +5,16 @@ import 'dart:isolate';
 import 'package:ffi/ffi.dart';
 import 'package:win32/win32.dart';
 
+import 'hotkey_messages.dart';
+
 /// 全局快捷键服务
 ///
 /// 在独立 Isolate 中调用 RegisterHotKey + GetMessageW 阻塞接收 WM_HOTKEY，
 /// 收到后通过 SendPort 通知主 Isolate，由主 Isolate 调用 window_manager
 /// 来显示/隐藏窗口。
+///
+/// 消息协议见 [HotkeyMessages]：注册结果与热键触发是两种可区分的消息，
+/// 注册失败（如快捷键被其他程序占用）会以 [HotkeyRegistration.failure] 返回。
 ///
 /// 默认快捷键：Ctrl+Alt+V
 class HotkeyService {
@@ -17,7 +22,6 @@ class HotkeyService {
   static const int _defaultMod = MOD_CONTROL | MOD_ALT;
   static const int _defaultVk = 0x56; // 'V'
 
-  static SendPort? _isolatePort;
   static Isolate? _isolate;
   static ReceivePort? _mainPort;
   static StreamSubscription? _subscription;
@@ -26,8 +30,8 @@ class HotkeyService {
   /// 启动全局快捷键监听。
   ///
   /// [onTriggered] 在快捷键被按下时调用（主 Isolate 上执行）。
-  /// 返回 true 表示注册成功。
-  static Future<bool> start({
+  /// 返回注册结果；失败时携带可读原因（被占用/系统错误码/超时）。
+  static Future<HotkeyRegistration> start({
     required Future<void> Function() onTriggered,
     int mod = _defaultMod,
     int vk = _defaultVk,
@@ -36,14 +40,12 @@ class HotkeyService {
     await stop();
     _onTriggered = onTriggered;
 
-    _mainPort = ReceivePort();
-
-    // 监听来自 Isolate 的消息（true 表示触发了快捷键）
-    _subscription = _mainPort!.listen((message) {
-      if (message == true) {
-        onTriggered();
-      }
+    final dispatcher = HotkeyMessageDispatcher(onTriggered: () {
+      onTriggered();
     });
+
+    _mainPort = ReceivePort();
+    _subscription = _mainPort!.listen(dispatcher.handleMessage);
 
     _isolate = await Isolate.spawn(
       _isolateEntry,
@@ -55,22 +57,25 @@ class HotkeyService {
       ),
     );
 
-    // 等待 Isolate 返回注册结果
-    final resultPort = ReceivePort();
-    _isolatePort = resultPort.sendPort;
-    // 简化：不等待具体结果，500ms 后假定成功
-    await Future.delayed(const Duration(milliseconds: 500));
-    resultPort.close();
-
-    return true;
+    final result = await dispatcher.registration;
+    if (!result.ok) {
+      // 注册失败的 Isolate 已自行退出，清理监听资源
+      await stop();
+    }
+    return result;
   }
 
   /// 用新的按键组合重新注册（设置页修改快捷键后调用）。
   ///
-  /// 沿用 start 时传入的回调；从未 start 过则返回 false。
-  static Future<bool> updateHotkey({required int mod, required int vk}) async {
+  /// 沿用 start 时传入的回调；从未 start 过则返回失败。
+  static Future<HotkeyRegistration> updateHotkey({
+    required int mod,
+    required int vk,
+  }) async {
     final onTriggered = _onTriggered;
-    if (onTriggered == null) return false;
+    if (onTriggered == null) {
+      return const HotkeyRegistration.failure('快捷键服务尚未启动');
+    }
     return start(onTriggered: onTriggered, mod: mod, vk: vk);
   }
 
@@ -97,12 +102,14 @@ class HotkeyService {
     );
 
     if (success == 0) {
-      // 注册失败，发回 false
-      sendPort.send(false);
+      sendPort.send(HotkeyMessages.registeredMessage(
+        ok: false,
+        errorCode: GetLastError(),
+      ));
       return;
     }
 
-    sendPort.send(true);
+    sendPort.send(HotkeyMessages.registeredMessage(ok: true));
 
     // 消息循环
     final msg = calloc<MSG>();
@@ -112,7 +119,7 @@ class HotkeyService {
         if (res <= 0) break; // WM_QUIT 或错误
 
         if (msg.ref.message == WM_HOTKEY && msg.ref.wParam == args.hotkeyId) {
-          sendPort.send(true);
+          sendPort.send(HotkeyMessages.triggeredMessage());
         }
       }
     } finally {

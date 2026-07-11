@@ -61,22 +61,29 @@ class _SettingsPageState extends State<SettingsPage> {
     final storage = await StorageService.instance;
     storage.hotkey = hotkey.format();
 
-    var applied = true;
+    String message = '快捷键已保存为 ${hotkey.format()}，重启后生效';
     if (Platform.isWindows) {
-      applied = await HotkeyService.updateHotkey(
+      final result = await HotkeyService.updateHotkey(
         mod: hotkey.modifiers,
         vk: hotkey.virtualKey!,
       );
+      if (!mounted) return;
+      final provider = context.read<SnippetProvider>();
+      if (result.ok) {
+        provider.setHotkeyError(null);
+        message = '快捷键已更新为 ${hotkey.format()}';
+      } else {
+        provider.setHotkeyError(
+          '快捷键 ${hotkey.format()} 注册失败：${result.reason}。请更换快捷键。',
+        );
+        message = '快捷键 ${hotkey.format()} 注册失败：${result.reason}';
+      }
     }
 
     if (!mounted) return;
     setState(() => _hotkey = hotkey);
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(applied
-            ? '快捷键已更新为 ${hotkey.format()}'
-            : '快捷键已保存为 ${hotkey.format()}，重启后生效'),
-      ),
+      SnackBar(content: Text(message)),
     );
   }
 
@@ -211,6 +218,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   const SizedBox(height: 10),
                   HotkeyRecorder(value: _hotkey, onChanged: _changeHotkey),
+                  _buildHotkeyErrorBanner(),
                 ],
               ),
             ),
@@ -267,6 +275,41 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  /// 热键注册失败时的错误横幅；注册正常时不占空间
+  Widget _buildHotkeyErrorBanner() {
+    return Consumer<SnippetProvider>(
+      builder: (context, provider, _) {
+        final error = provider.hotkeyError;
+        if (error == null) return const SizedBox.shrink();
+        return Container(
+          key: const Key('hotkey-error-banner'),
+          margin: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFDECEA),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFE8B4B0)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.warning_amber_rounded,
+                  size: 16, color: Color(0xFFB3352C)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  error,
+                  style: const TextStyle(
+                      fontSize: 12.5, color: Color(0xFFB3352C)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

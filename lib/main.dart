@@ -65,11 +65,17 @@ void main() async {
   if (Platform.isWindows) {
     // 注册全局快捷键（默认 Ctrl+Alt+V，可在设置中修改）
     final hotkey = Hotkey.parse(storage.hotkey) ?? Hotkey.defaultHotkey;
-    await HotkeyService.start(
+    final registration = await HotkeyService.start(
       onTriggered: toggleSearchWindow,
       mod: hotkey.modifiers,
       vk: hotkey.virtualKey!,
     );
+    if (!registration.ok) {
+      snippetProvider.setHotkeyError(
+        '全局快捷键 ${hotkey.format()} 注册失败：${registration.reason}。'
+        '请在下方更换快捷键。',
+      );
+    }
 
     // 系统托盘：左键切换窗口，右键菜单打开设置/退出
     late final TrayService tray;
