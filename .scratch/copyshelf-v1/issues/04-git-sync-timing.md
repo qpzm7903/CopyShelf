@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # 04: Git 同步时机——push 前 rebase + 手动立即同步
 
@@ -27,3 +27,9 @@ Status: ready-for-agent
 ## Blocked by
 
 - 02 (`02-split-stats-from-definitions.md`)
+
+## Comments
+
+- 2026-07-11: 完成。38 个测试全过，其中 3 个是真实 git 双 clone 集成测试（交叉改动收敛 / 同行冲突后本地仍可编辑 / 空远端 pull 不报错）。
+- 顺带修复：snippets.json 改为多行缩进 JSON——原单行格式下任何双端并发编辑必然文本冲突。
+- 发现新问题，另立工单 07：第二台全新设备（本地已有 init commit）配置远端后首次 pull 会因不相关历史/scaffold 文件产生 add/add 冲突。
