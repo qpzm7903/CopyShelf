@@ -123,11 +123,82 @@ class _SearchOverlayState extends State<SearchOverlay> {
     _pasteAt(provider, _selectedIndex);
   }
 
-  void _pasteAt(SnippetProvider provider, int index) {
+  Future<void> _pasteAt(SnippetProvider provider, int index) async {
     final snippets = provider.filteredSnippets;
     if (index < 0 || index >= snippets.length) return;
-    provider.useSnippet(snippets[index].id);
+    final snippet = snippets[index];
+
+    // 终端多行护栏：多行片段粘进终端会被逐行执行，先确认
+    if (provider.needsTerminalPasteConfirm(snippet.id)) {
+      final confirmed = await _confirmTerminalPaste(provider, snippet);
+      if (confirmed != true) return;
+    }
+
+    provider.useSnippet(snippet.id);
     provider.hideSearch();
+  }
+
+  Future<bool?> _confirmTerminalPaste(
+      SnippetProvider provider, Snippet snippet) {
+    var suppressChecked = false;
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          key: const Key('terminal-paste-confirm'),
+          title: const Text('粘贴多行内容到终端？'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '目标窗口是终端，多行内容会被逐行执行。',
+                style: TextStyle(fontSize: 13),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: double.maxFinite,
+                constraints: const BoxConstraints(maxHeight: 160),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppTheme.canvas,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(snippet.content, style: AppTheme.mono()),
+                ),
+              ),
+              CheckboxListTile(
+                key: const Key('terminal-paste-suppress'),
+                value: suppressChecked,
+                onChanged: (v) =>
+                    setDialogState(() => suppressChecked = v ?? false),
+                title: const Text('不再提醒', style: TextStyle(fontSize: 12.5)),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+                dense: true,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              key: const Key('terminal-paste-proceed'),
+              onPressed: () {
+                if (suppressChecked) {
+                  provider.suppressTerminalPasteWarning();
+                }
+                Navigator.pop(ctx, true);
+              },
+              child: const Text('仍然粘贴'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override

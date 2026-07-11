@@ -1,7 +1,7 @@
 name: copyshelf
 description: Windows 片段启动器 — 快速搜索并粘贴你预先配置的文本片段
 publish_to: 'none'
-version: 0.1.8
+version: 0.1.9
 
 environment:
   sdk: '>=3.10.0 <4.0.0'

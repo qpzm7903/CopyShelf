@@ -5,7 +5,9 @@ import '../models/snippet_stats.dart';
 import '../services/storage_service.dart';
 import '../services/git_service.dart';
 import '../services/paste_service.dart';
+import '../services/target_window_service.dart';
 import '../utils/search_index.dart';
+import '../utils/terminal_paste_guard.dart';
 
 /// 片段状态管理
 ///
@@ -15,10 +17,14 @@ import '../utils/search_index.dart';
 /// 粘贴函数签名（测试时可注入 mock）
 typedef PasteFn = Future<PasteOutcome> Function(String text);
 
+/// 目标窗口进程名获取函数（测试时可注入 mock）
+typedef TargetProcessNameFn = String? Function();
+
 class SnippetProvider extends ChangeNotifier {
   final StorageService _storage;
   final GitService _git;
   final PasteFn _paste;
+  final TargetProcessNameFn _targetProcessName;
   final _uuid = Uuid();
 
   List<Snippet> _snippets = [];
@@ -37,9 +43,12 @@ class SnippetProvider extends ChangeNotifier {
     StorageService? storage,
     GitService? git,
     PasteFn? paste,
+    TargetProcessNameFn? targetProcessName,
   })  : _storage = storage ?? (throw ArgumentError.notNull('storage')),
         _git = git ?? (throw ArgumentError.notNull('git')),
-        _paste = paste ?? PasteService.paste;
+        _paste = paste ?? PasteService.paste,
+        _targetProcessName =
+            targetProcessName ?? (() => TargetWindowService.processName);
 
   // ========== Getters ==========
 
@@ -174,6 +183,24 @@ class SnippetProvider extends ChangeNotifier {
       // 全都没用过：按名称字典序，保证稳定可预期
       return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
+  }
+
+  // ========== 终端多行粘贴护栏 ==========
+
+  /// 该片段此刻粘贴是否需要先弹终端多行确认框
+  bool needsTerminalPasteConfirm(String id) {
+    final index = _snippets.indexWhere((s) => s.id == id);
+    if (index == -1) return false;
+    return shouldConfirmTerminalPaste(
+      content: _snippets[index].content,
+      targetProcessName: _targetProcessName(),
+      suppressed: _storage.suppressTerminalPasteWarning,
+    );
+  }
+
+  /// 用户勾选「不再提醒」
+  void suppressTerminalPasteWarning() {
+    _storage.suppressTerminalPasteWarning = true;
   }
 
   // ========== 粘贴（记录本机使用统计，不触发 Git） ==========

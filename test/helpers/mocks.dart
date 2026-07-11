@@ -35,6 +35,15 @@ class MockStorageService extends StorageService {
     _storedStats = Map.from(stats);
   }
 
+  bool _suppressTerminalPasteWarning = false;
+
+  @override
+  bool get suppressTerminalPasteWarning => _suppressTerminalPasteWarning;
+
+  @override
+  set suppressTerminalPasteWarning(bool value) =>
+      _suppressTerminalPasteWarning = value;
+
   @override
   Future<String> getDataDirPath() async => '/test/data';
 

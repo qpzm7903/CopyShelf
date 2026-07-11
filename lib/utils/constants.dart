@@ -2,7 +2,7 @@
 
 class AppConstants {
   static const String appName = 'CopyShelf';
-  static const String version = '0.1.8';
+  static const String version = '0.1.9';
 
   // 默认数据目录（相对用户目录）
   static const String defaultDataDirName = '.copyshelf';
@@ -20,4 +20,7 @@ class AppConstants {
   static const String prefKeyHotkey = 'hotkey';
   static const String prefKeyDataDir = 'data_dir';
   static const String prefKeyGitRemote = 'git_remote';
+  // 终端多行粘贴确认框的「不再提醒」
+  static const String prefKeySuppressTerminalPasteWarning =
+      'suppress_terminal_paste_warning';
 }
