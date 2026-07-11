@@ -21,6 +21,7 @@ class HotkeyService {
   static Isolate? _isolate;
   static ReceivePort? _mainPort;
   static StreamSubscription? _subscription;
+  static Future<void> Function()? _onTriggered;
 
   /// 启动全局快捷键监听。
   ///
@@ -33,6 +34,7 @@ class HotkeyService {
   }) async {
     // 已启动则先停止
     await stop();
+    _onTriggered = onTriggered;
 
     _mainPort = ReceivePort();
 
@@ -61,6 +63,15 @@ class HotkeyService {
     resultPort.close();
 
     return true;
+  }
+
+  /// 用新的按键组合重新注册（设置页修改快捷键后调用）。
+  ///
+  /// 沿用 start 时传入的回调；从未 start 过则返回 false。
+  static Future<bool> updateHotkey({required int mod, required int vk}) async {
+    final onTriggered = _onTriggered;
+    if (onTriggered == null) return false;
+    return start(onTriggered: onTriggered, mod: mod, vk: vk);
   }
 
   /// 停止全局快捷键监听

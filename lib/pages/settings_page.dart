@@ -1,13 +1,20 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../models/snippet.dart';
 import '../providers/snippet_provider.dart';
 import '../services/storage_service.dart';
 import '../services/git_service.dart';
+import '../services/hotkey_service.dart';
+import '../theme/app_theme.dart';
 import '../utils/constants.dart';
+import '../utils/hotkey.dart';
+import '../widgets/hotkey_recorder.dart';
+import 'snippet_editor_page.dart';
 
 /// 设置页面
 ///
-/// 管理数据目录、Git 远程地址、快捷键、片段 CRUD。
+/// 三个分区：片段库（增删改）、快捷键（录制修改）、数据与同步。
 class SettingsPage extends StatefulWidget {
   final VoidCallback? onBack;
 
@@ -18,17 +25,11 @@ class SettingsPage extends StatefulWidget {
 }
 
 class _SettingsPageState extends State<SettingsPage> {
-  final _nameController = TextEditingController();
-  final _contentController = TextEditingController();
-  final _descController = TextEditingController();
-  final _tagController = TextEditingController();
   final _gitRemoteController = TextEditingController();
   final _dataDirController = TextEditingController();
 
-  bool _isEditing = false;
+  Hotkey _hotkey = Hotkey.defaultHotkey;
   bool _isSyncing = false;
-  String? _editingId;
-  List<String> _tempTags = [];
 
   @override
   void initState() {
@@ -38,10 +39,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _contentController.dispose();
-    _descController.dispose();
-    _tagController.dispose();
     _gitRemoteController.dispose();
     _dataDirController.dispose();
     super.dispose();
@@ -50,9 +47,40 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _loadSettings() async {
     final storage = await StorageService.instance;
     final dataDir = await storage.getDataDirPath();
-    _dataDirController.text = dataDir;
-    _gitRemoteController.text = storage.gitRemote ?? '';
+    if (!mounted) return;
+    setState(() {
+      _dataDirController.text = dataDir;
+      _gitRemoteController.text = storage.gitRemote ?? '';
+      _hotkey = Hotkey.parse(storage.hotkey) ?? Hotkey.defaultHotkey;
+    });
   }
+
+  // ---------- 快捷键 ----------
+
+  Future<void> _changeHotkey(Hotkey hotkey) async {
+    final storage = await StorageService.instance;
+    storage.hotkey = hotkey.format();
+
+    var applied = true;
+    if (Platform.isWindows) {
+      applied = await HotkeyService.updateHotkey(
+        mod: hotkey.modifiers,
+        vk: hotkey.virtualKey!,
+      );
+    }
+
+    if (!mounted) return;
+    setState(() => _hotkey = hotkey);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(applied
+            ? '快捷键已更新为 ${hotkey.format()}'
+            : '快捷键已保存为 ${hotkey.format()}，重启后生效'),
+      ),
+    );
+  }
+
+  // ---------- 数据与同步 ----------
 
   Future<void> _saveDataDir() async {
     final storage = await StorageService.instance;
@@ -80,7 +108,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  /// 手动「立即同步」：拉取远端变更，失败时弹窗提示（冲突不阻塞本地编辑）
   Future<void> _syncNow() async {
     final provider = context.read<SnippetProvider>();
     setState(() => _isSyncing = true);
@@ -111,361 +138,27 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  void _startAdd() {
-    setState(() {
-      _isEditing = true;
-      _editingId = null;
-      _nameController.clear();
-      _contentController.clear();
-      _descController.clear();
-      _tagController.clear();
-      _tempTags = [];
-    });
-  }
+  // ---------- 片段库 ----------
 
-  void _startEdit(String id, String name, String content, String desc, List<String> tags) {
-    setState(() {
-      _isEditing = true;
-      _editingId = id;
-      _nameController.text = name;
-      _contentController.text = content;
-      _descController.text = desc;
-      _tempTags = List.from(tags);
-    });
-  }
-
-  void _cancelEdit() {
-    setState(() {
-      _isEditing = false;
-      _editingId = null;
-    });
-  }
-
-  Future<void> _saveSnippet() async {
-    final provider = context.read<SnippetProvider>();
-    final name = _nameController.text.trim();
-    final content = _contentController.text.trim();
-
-    if (name.isEmpty || content.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('名称和内容不能为空')),
-      );
-      return;
-    }
-
-    if (_editingId != null) {
-      await provider.updateSnippet(
-        id: _editingId!,
-        name: name,
-        content: content,
-        description: _descController.text.trim(),
-        tags: _tempTags,
-      );
-    } else {
-      await provider.addSnippet(
-        name: name,
-        content: content,
-        description: _descController.text.trim(),
-        tags: _tempTags,
-      );
-    }
-
-    _cancelEdit();
-  }
-
-  void _addTag() {
-    final tag = _tagController.text.trim();
-    if (tag.isNotEmpty && !_tempTags.contains(tag)) {
-      setState(() {
-        _tempTags.add(tag);
-        _tagController.clear();
-      });
-    }
-  }
-
-  void _removeTag(String tag) {
-    setState(() {
-      _tempTags.remove(tag);
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: widget.onBack,
-        ),
-        title: const Text('设置'),
-        actions: [
-          if (!_isEditing)
-            TextButton.icon(
-              onPressed: _startAdd,
-              icon: const Icon(Icons.add, size: 18),
-              label: const Text('添加片段'),
-            ),
-        ],
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // ---- 片段编辑区 ----
-          if (_isEditing) _buildSnippetEditor(),
-          if (_isEditing) const SizedBox(height: 24),
-
-          // ---- 片段列表 ----
-          _buildSectionTitle('已有片段'),
-          const SizedBox(height: 8),
-          Consumer<SnippetProvider>(
-            builder: (context, provider, _) {
-              final snippets = provider.snippets;
-              if (snippets.isEmpty) {
-                return Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Center(
-                      child: Text(
-                        '还没有片段，点击右上角添加',
-                        style: TextStyle(color: Colors.grey[400]),
-                      ),
-                    ),
-                  ),
-                );
-              }
-              return Column(
-                children: snippets.map((snippet) => _buildSnippetCard(snippet)).toList(),
-              );
-            },
-          ),
-
-          const SizedBox(height: 32),
-
-          // ---- 数据目录 ----
-          _buildSectionTitle('数据目录'),
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _dataDirController,
-                      decoration: const InputDecoration(
-                        hintText: '如 C:\\Users\\你\\.copyshelf',
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: _saveDataDir,
-                    child: const Text('保存'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '修改后需重启应用生效。片段数据存储在此目录的 snippets.json 中。',
-            style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-          ),
-
-          const SizedBox(height: 24),
-
-          // ---- Git 远程地址 ----
-          _buildSectionTitle('Git 远程仓库'),
-          const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _gitRemoteController,
-                      decoration: const InputDecoration(
-                        hintText: '如 https://github.com/user/repo.git',
-                        isDense: true,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  TextButton(
-                    onPressed: _saveGitRemote,
-                    child: const Text('保存'),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '设置后每次增删改片段自动 commit & push（push 前自动 pull --rebase），启动时自动 pull。',
-            style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: OutlinedButton.icon(
-              onPressed: _isSyncing ? null : _syncNow,
-              icon: _isSyncing
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.sync, size: 16),
-              label: Text(_isSyncing ? '同步中…' : '立即同步'),
-            ),
-          ),
-
-          const SizedBox(height: 32),
-
-          // ---- 版本信息 ----
-          Center(
-            child: Text(
-              'CopyShelf v${AppConstants.version}',
-              style: TextStyle(fontSize: 12, color: Colors.grey[400]),
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
+  void _openEditor([Snippet? snippet]) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SnippetEditorPage(snippet: snippet),
       ),
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(
-        fontSize: 13,
-        fontWeight: FontWeight.w600,
-        color: Color(0xFF999999),
-      ),
-    );
-  }
-
-  Widget _buildSnippetEditor() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              _editingId != null ? '编辑片段' : '添加片段',
-              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(labelText: '名称 *', isDense: true),
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _contentController,
-              decoration: const InputDecoration(labelText: '内容 *', isDense: true),
-              maxLines: 3,
-              minLines: 1,
-            ),
-            const SizedBox(height: 8),
-            TextField(
-              controller: _descController,
-              decoration: const InputDecoration(labelText: '描述（可选）', isDense: true),
-            ),
-            const SizedBox(height: 12),
-            // 标签
-            const Text('标签', style: TextStyle(fontSize: 13, color: Color(0xFF666666))),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 6,
-              runSpacing: 4,
-              children: [
-                ..._tempTags.map((t) => Chip(
-                      label: Text(t, style: const TextStyle(fontSize: 12)),
-                      deleteIcon: const Icon(Icons.close, size: 14),
-                      onDeleted: () => _removeTag(t),
-                      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      visualDensity: VisualDensity.compact,
-                    )),
-                SizedBox(
-                  width: 120,
-                  height: 32,
-                  child: TextField(
-                    controller: _tagController,
-                    decoration: const InputDecoration(
-                      hintText: '添加标签',
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                    ),
-                    onSubmitted: (_) => _addTag(),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                TextButton(
-                  onPressed: _cancelEdit,
-                  child: const Text('取消'),
-                ),
-                const SizedBox(width: 8),
-                ElevatedButton(
-                  onPressed: _saveSnippet,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6366F1),
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text(_editingId != null ? '保存' : '添加'),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSnippetCard(dynamic snippet) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 6),
-      child: ListTile(
-        title: Text(snippet.name),
-        subtitle: snippet.description.isNotEmpty
-            ? Text(snippet.description, maxLines: 1, overflow: TextOverflow.ellipsis)
-            : null,
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            IconButton(
-              icon: const Icon(Icons.edit_outlined, size: 18),
-              onPressed: () => _startEdit(
-                snippet.id, snippet.name, snippet.content, snippet.description, snippet.tags,
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-              onPressed: () => _confirmDelete(snippet.id, snippet.name),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _confirmDelete(String id, String name) async {
+  Future<void> _confirmDelete(Snippet snippet) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除片段'),
-        content: Text('确定删除 "$name" 吗？'),
+        content: Text('确定删除「${snippet.name}」吗？此操作会同步到其他设备。'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('取消'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('删除', style: TextStyle(color: Colors.red)),
@@ -474,9 +167,248 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     );
 
-    if (confirmed == true) {
-      if (!mounted) return;
-      await context.read<SnippetProvider>().deleteSnippet(id);
+    if (confirmed == true && mounted) {
+      await context.read<SnippetProvider>().deleteSnippet(snippet.id);
     }
+  }
+
+  // ---------- 布局 ----------
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, size: 20),
+          onPressed: widget.onBack,
+        ),
+        title: const Text('设置'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+        children: [
+          _buildSectionHeader(
+            '片段库',
+            trailing: TextButton.icon(
+              onPressed: () => _openEditor(),
+              icon: const Icon(Icons.add, size: 16),
+              label: const Text('新建片段'),
+            ),
+          ),
+          _buildSnippetLibrary(),
+          const SizedBox(height: 28),
+          _buildSectionHeader('快捷键'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '在任意应用中按下此组合呼出搜索框',
+                    style: TextStyle(
+                        fontSize: 12.5, color: AppTheme.inkSecondary),
+                  ),
+                  const SizedBox(height: 10),
+                  HotkeyRecorder(value: _hotkey, onChanged: _changeHotkey),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+          _buildSectionHeader('数据与同步'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildFieldRow(
+                    label: '数据目录',
+                    hint: '如 C:\\Users\\你\\.copyshelf',
+                    controller: _dataDirController,
+                    onSave: _saveDataDir,
+                    helper:
+                        '片段存储在此目录的 ${AppConstants.snippetsFileName}，修改后重启生效',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildFieldRow(
+                    label: 'Git 远程仓库',
+                    hint: '如 https://github.com/user/repo.git',
+                    controller: _gitRemoteController,
+                    onSave: _saveGitRemote,
+                    helper: '增删改片段自动 commit & push，启动时自动 pull',
+                  ),
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                    onPressed: _isSyncing ? null : _syncNow,
+                    icon: _isSyncing
+                        ? const SizedBox(
+                            width: 13,
+                            height: 13,
+                            child:
+                                CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.sync, size: 15),
+                    label: Text(_isSyncing ? '同步中…' : '立即同步',
+                        style: const TextStyle(fontSize: 12.5)),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
+          Center(
+            child: Text(
+              'CopyShelf v${AppConstants.version}',
+              style:
+                  const TextStyle(fontSize: 12, color: AppTheme.inkFaint),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, {Widget? trailing}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.inkSecondary,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const Spacer(),
+          if (trailing != null) trailing,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSnippetLibrary() {
+    return Consumer<SnippetProvider>(
+      builder: (context, provider, _) {
+        final snippets = provider.snippets;
+        if (snippets.isEmpty) {
+          return Card(
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Center(
+                child: Text(
+                  '还没有片段，点击右上角「新建片段」',
+                  style: const TextStyle(
+                      fontSize: 13, color: AppTheme.inkFaint),
+                ),
+              ),
+            ),
+          );
+        }
+        return Card(
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            children: [
+              for (var i = 0; i < snippets.length; i++) ...[
+                if (i > 0) const Divider(indent: 16, endIndent: 16),
+                _buildSnippetRow(snippets[i]),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSnippetRow(Snippet snippet) {
+    final preview = snippet.content.replaceAll('\n', ' ⏎ ');
+    return InkWell(
+      onTap: () => _openEditor(snippet),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    snippet.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    preview,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTheme.mono(fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.edit_outlined,
+                  size: 16, color: AppTheme.inkSecondary),
+              onPressed: () => _openEditor(snippet),
+              tooltip: '编辑',
+            ),
+            IconButton(
+              icon: const Icon(Icons.delete_outline,
+                  size: 16, color: Color(0xFFD05C5C)),
+              onPressed: () => _confirmDelete(snippet),
+              tooltip: '删除',
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldRow({
+    required String label,
+    required String hint,
+    required TextEditingController controller,
+    required VoidCallback onSave,
+    required String helper,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label,
+            style: const TextStyle(
+                fontSize: 12.5, color: AppTheme.inkSecondary)),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: controller,
+                style: const TextStyle(fontSize: 13),
+                decoration: InputDecoration(hintText: hint, isDense: true),
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: onSave,
+              child: const Text('保存', style: TextStyle(fontSize: 12.5)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(helper,
+            style:
+                const TextStyle(fontSize: 11.5, color: AppTheme.inkFaint)),
+      ],
+    );
   }
 }

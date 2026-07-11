@@ -12,6 +12,7 @@ import 'services/tray_service.dart';
 import 'theme/app_theme.dart';
 import 'pages/home_page.dart';
 import 'utils/constants.dart';
+import 'utils/hotkey.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -62,8 +63,13 @@ void main() async {
   }
 
   if (Platform.isWindows) {
-    // 注册全局快捷键：Ctrl+Alt+V
-    await HotkeyService.start(onTriggered: toggleSearchWindow);
+    // 注册全局快捷键（默认 Ctrl+Alt+V，可在设置中修改）
+    final hotkey = Hotkey.parse(storage.hotkey) ?? Hotkey.defaultHotkey;
+    await HotkeyService.start(
+      onTriggered: toggleSearchWindow,
+      mod: hotkey.modifiers,
+      vk: hotkey.virtualKey!,
+    );
 
     // 系统托盘：左键切换窗口，右键菜单打开设置/退出
     late final TrayService tray;

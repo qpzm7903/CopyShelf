@@ -55,7 +55,6 @@ class _HomePageState extends State<HomePage> with WindowListener {
 
         if (provider.error != null && provider.snippets.isEmpty) {
           return Scaffold(
-            backgroundColor: Colors.transparent,
             body: Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
@@ -84,7 +83,6 @@ class _HomePageState extends State<HomePage> with WindowListener {
         }
 
         return Scaffold(
-          backgroundColor: Colors.transparent,
           body: Stack(
             children: [
               const SearchOverlay(),

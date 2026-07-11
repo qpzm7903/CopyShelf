@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import '../models/snippet.dart';
 import '../providers/snippet_provider.dart';
+import '../services/storage_service.dart';
+import '../theme/app_theme.dart';
+import '../utils/hotkey.dart';
+import '../widgets/key_caps.dart';
 
 /// 搜索主界面（类 Spotlight 搜索框）
 ///
-/// 顶部是搜索输入框，下方是片段列表。
-/// 使用键盘上下键选择，回车粘贴。
+/// 大号搜索输入 + 片段列表（名称 + 等宽内容预览）+ 底部快捷键提示栏。
+/// 键盘上下键选择，回车粘贴，Esc 隐藏。
 class SearchOverlay extends StatefulWidget {
   const SearchOverlay({super.key});
 
@@ -18,6 +23,21 @@ class _SearchOverlayState extends State<SearchOverlay> {
   final _searchController = TextEditingController();
   final _focusNode = FocusNode();
   int _selectedIndex = 0;
+  Hotkey _hotkey = Hotkey.defaultHotkey;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadHotkey();
+  }
+
+  Future<void> _loadHotkey() async {
+    final storage = await StorageService.instance;
+    final hotkey = Hotkey.parse(storage.hotkey);
+    if (hotkey != null && mounted) {
+      setState(() => _hotkey = hotkey);
+    }
+  }
 
   @override
   void dispose() {
@@ -26,23 +46,16 @@ class _SearchOverlayState extends State<SearchOverlay> {
     super.dispose();
   }
 
-  /// 处理键盘事件
   KeyEventResult _handleKeyEvent(KeyEvent event, SnippetProvider provider) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
-    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
-      setState(() {
-        _selectedIndex = (_selectedIndex + 1) % provider.filteredSnippets.length;
-      });
+    final count = provider.filteredSnippets.length;
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown && count > 0) {
+      setState(() => _selectedIndex = (_selectedIndex + 1) % count);
       return KeyEventResult.handled;
     }
-    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
-      setState(() {
-        _selectedIndex = _selectedIndex - 1;
-        if (_selectedIndex < 0) {
-          _selectedIndex = provider.filteredSnippets.length - 1;
-        }
-      });
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp && count > 0) {
+      setState(() => _selectedIndex = (_selectedIndex - 1 + count) % count);
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.escape) {
@@ -56,11 +69,21 @@ class _SearchOverlayState extends State<SearchOverlay> {
     return KeyEventResult.ignored;
   }
 
+  void _pasteSelected(SnippetProvider provider) {
+    if (provider.filteredSnippets.isEmpty) return;
+    final snippet = provider.filteredSnippets[_selectedIndex];
+    provider.useSnippet(snippet.id);
+    provider.hideSearch();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<SnippetProvider>(
       builder: (context, provider, _) {
         final snippets = provider.filteredSnippets;
+        if (_selectedIndex >= snippets.length) {
+          _selectedIndex = 0;
+        }
 
         return Focus(
           autofocus: true,
@@ -68,13 +91,15 @@ class _SearchOverlayState extends State<SearchOverlay> {
           onKeyEvent: (node, event) => _handleKeyEvent(event, provider),
           child: Column(
             children: [
-              _buildSearchBar(context, provider),
-              if (provider.notice != null) _buildNoticeBanner(provider.notice!),
+              _buildSearchBar(provider),
+              if (provider.notice != null)
+                _NoticeBanner(notice: provider.notice!),
               Expanded(
                 child: snippets.isEmpty
                     ? _buildEmptyState(provider)
-                    : _buildSnippetList(context, provider, snippets),
+                    : _buildSnippetList(provider, snippets),
               ),
+              _buildFooter(snippets.length),
             ],
           ),
         );
@@ -82,39 +107,276 @@ class _SearchOverlayState extends State<SearchOverlay> {
     );
   }
 
-  Widget _buildSearchBar(BuildContext context, SnippetProvider provider) {
+  Widget _buildSearchBar(SnippetProvider provider) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+      padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
       decoration: const BoxDecoration(
-        color: Colors.white,
+        color: AppTheme.surface,
         border: Border(
-          bottom: BorderSide(color: Color(0xFFEEEEEE), width: 0.5),
+          bottom: BorderSide(color: AppTheme.hairline, width: 0.5),
         ),
       ),
-      child: TextField(
-        controller: _searchController,
-        autofocus: true,
-        decoration: const InputDecoration(
-          hintText: '搜索片段…',
-          prefixIcon: Icon(Icons.search, size: 20),
-          isDense: true,
-        ),
-        onChanged: (value) {
-          provider.setSearchQuery(value);
-          setState(() {
-            _selectedIndex = 0;
-          });
-        },
-        onSubmitted: (_) => _pasteSelected(provider),
+      child: Row(
+        children: [
+          const Icon(Icons.search, size: 20, color: AppTheme.inkFaint),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              autofocus: true,
+              style: const TextStyle(fontSize: 16, color: AppTheme.ink),
+              decoration: const InputDecoration(
+                hintText: '搜索片段（支持拼音）',
+                hintStyle:
+                    TextStyle(fontSize: 16, color: AppTheme.inkFaint),
+                filled: false,
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+              ),
+              onChanged: (value) {
+                provider.setSearchQuery(value);
+                setState(() => _selectedIndex = 0);
+              },
+              onSubmitted: (_) => _pasteSelected(provider),
+            ),
+          ),
+          const SizedBox(width: 12),
+          KeyCaps(_hotkey.parts),
+        ],
       ),
     );
   }
 
-  /// 粘贴降级提示（如目标窗口已关闭、内容仅复制到剪贴板）
-  Widget _buildNoticeBanner(String notice) {
+  Widget _buildSnippetList(SnippetProvider provider, List<Snippet> snippets) {
+    return Container(
+      color: AppTheme.surface,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        itemCount: snippets.length,
+        itemBuilder: (context, index) {
+          final snippet = snippets[index];
+          return _SnippetRow(
+            snippet: snippet,
+            frequency: provider.statsFor(snippet.id).frequency,
+            isSelected: index == _selectedIndex,
+            onTap: () {
+              provider.useSnippet(snippet.id);
+              provider.hideSearch();
+            },
+            onHover: () => setState(() => _selectedIndex = index),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(SnippetProvider provider) {
+    if (provider.isLoading) {
+      return Container(
+        color: AppTheme.surface,
+        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+
+    final isLibraryEmpty =
+        provider.searchQuery.isEmpty && provider.snippets.isEmpty;
+
+    return Container(
+      color: AppTheme.surface,
+      width: double.infinity,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            isLibraryEmpty ? Icons.inbox_outlined : Icons.search_off,
+            size: 40,
+            color: AppTheme.inkFaint,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isLibraryEmpty ? '片段库还是空的' : '没有匹配的片段',
+            style: const TextStyle(fontSize: 14, color: AppTheme.inkSecondary),
+          ),
+          const SizedBox(height: 6),
+          if (isLibraryEmpty)
+            Text(
+              '点击右下角设置添加第一条片段，之后按快捷键随时呼出',
+              style:
+                  const TextStyle(fontSize: 12, color: AppTheme.inkFaint),
+            )
+          else
+            Text(
+              '换个关键词试试，名称、描述、标签、拼音都能搜',
+              style:
+                  const TextStyle(fontSize: 12, color: AppTheme.inkFaint),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFooter(int count) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+      decoration: const BoxDecoration(
+        color: AppTheme.canvas,
+        border: Border(
+          top: BorderSide(color: AppTheme.hairline, width: 0.5),
+        ),
+      ),
+      child: Row(
+        children: [
+          const KeyCaps(['↑', '↓'], fontSize: 10),
+          const SizedBox(width: 4),
+          const _FooterLabel('选择'),
+          const SizedBox(width: 14),
+          const KeyCaps(['Enter'], fontSize: 10),
+          const SizedBox(width: 4),
+          const _FooterLabel('粘贴'),
+          const SizedBox(width: 14),
+          const KeyCaps(['Esc'], fontSize: 10),
+          const SizedBox(width: 4),
+          const _FooterLabel('隐藏'),
+          const Spacer(),
+          _FooterLabel(count > 0 ? '$count 条片段' : ''),
+        ],
+      ),
+    );
+  }
+}
+
+class _FooterLabel extends StatelessWidget {
+  final String text;
+  const _FooterLabel(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: const TextStyle(fontSize: 11, color: AppTheme.inkSecondary),
+    );
+  }
+}
+
+/// 列表行：名称 + 标签 + 使用次数，下方一行等宽内容预览
+class _SnippetRow extends StatelessWidget {
+  final Snippet snippet;
+  final int frequency;
+  final bool isSelected;
+  final VoidCallback onTap;
+  final VoidCallback onHover;
+
+  const _SnippetRow({
+    required this.snippet,
+    required this.frequency,
+    required this.isSelected,
+    required this.onTap,
+    required this.onHover,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = snippet.content.replaceAll('\n', ' ⏎ ');
+
+    return MouseRegion(
+      onEnter: (_) => onHover(),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          decoration: BoxDecoration(
+            color: isSelected ? AppTheme.accentTint : Colors.transparent,
+            border: Border(
+              left: BorderSide(
+                color: isSelected ? AppTheme.accent : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          padding: const EdgeInsets.fromLTRB(18, 8, 16, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      snippet.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        color: AppTheme.ink,
+                      ),
+                    ),
+                  ),
+                  ...snippet.tags.take(2).map(
+                        (tag) => Padding(
+                          padding: const EdgeInsets.only(left: 6),
+                          child: _TagChip(label: tag),
+                        ),
+                      ),
+                  if (frequency > 0) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '×$frequency',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.inkFaint,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                preview,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTheme.mono(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TagChip extends StatelessWidget {
+  final String label;
+  const _TagChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: AppTheme.canvas,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: AppTheme.hairline, width: 0.5),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 10.5, color: AppTheme.inkSecondary),
+      ),
+    );
+  }
+}
+
+/// 粘贴降级提示（如目标窗口已关闭、内容仅复制到剪贴板）
+class _NoticeBanner extends StatelessWidget {
+  final String notice;
+  const _NoticeBanner({required this.notice});
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
       color: const Color(0xFFFFF8E1),
       child: Row(
         children: [
@@ -127,127 +389,6 @@ class _SearchOverlayState extends State<SearchOverlay> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildSnippetList(
-    BuildContext context,
-    SnippetProvider provider,
-    List<dynamic> snippets,
-  ) {
-    return ListView.separated(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      itemCount: snippets.length,
-      separatorBuilder: (_, __) => const Divider(indent: 16, endIndent: 16),
-      itemBuilder: (context, index) {
-        final snippet = snippets[index];
-        final isSelected = index == _selectedIndex;
-
-        return ListTile(
-          selected: isSelected,
-          selectedTileColor: const Color(0xFFF0F0FF),
-          leading: const Icon(Icons.code, size: 20, color: Color(0xFF6366F1)),
-          title: Text(
-            snippet.name,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          subtitle: snippet.description.isNotEmpty
-              ? Text(
-                  snippet.description,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                )
-              : null,
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (snippet.tags.isNotEmpty)
-                ...snippet.tags.take(2).map(
-                      (tag) => Padding(
-                        padding: const EdgeInsets.only(left: 4),
-                        child: _TagChip(label: tag),
-                      ),
-                    ),
-              const SizedBox(width: 8),
-              Text(
-                '${provider.statsFor(snippet.id).frequency}',
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Color(0xFFCCCCCC),
-                ),
-              ),
-            ],
-          ),
-          onTap: () {
-            provider.useSnippet(snippet.id);
-            provider.hideSearch();
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildEmptyState(SnippetProvider provider) {
-    if (provider.isLoading) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (provider.searchQuery.isEmpty && provider.snippets.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.inbox_outlined, size: 48, color: Colors.grey[300]),
-            const SizedBox(height: 12),
-            Text(
-              '还没有片段',
-              style: TextStyle(fontSize: 14, color: Colors.grey[400]),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              '在设置中添加你的第一条片段',
-              style: TextStyle(fontSize: 12, color: Colors.grey[350]),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Center(
-      child: Text(
-        '未找到匹配的片段',
-        style: TextStyle(fontSize: 14, color: Colors.grey[400]),
-      ),
-    );
-  }
-
-  void _pasteSelected(SnippetProvider provider) {
-    if (provider.filteredSnippets.isEmpty) return;
-    final snippet = provider.filteredSnippets[_selectedIndex];
-    provider.useSnippet(snippet.id);
-    provider.hideSearch();
-  }
-}
-
-/// 标签小芯片
-class _TagChip extends StatelessWidget {
-  final String label;
-  const _TagChip({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF0F0FF),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: const Color(0xFFE0E0FF), width: 0.5),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(fontSize: 10, color: Color(0xFF6366F1)),
       ),
     );
   }
