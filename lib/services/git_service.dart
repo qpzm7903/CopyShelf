@@ -8,7 +8,7 @@ import '../utils/constants.dart';
 ///
 /// 管理数据目录内的 Git 仓库操作：
 /// - 首次使用时自动 git init
-/// - 每次增删改指令后自动 commit
+/// - 每次增删改片段后自动 commit
 /// - 每次 commit 后自动 push
 /// - 应用启动时自动 pull --rebase
 /// - 冲突时反馈用户手动处理

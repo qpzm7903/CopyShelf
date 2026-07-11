@@ -3,14 +3,14 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../models/command.dart';
+import '../models/snippet.dart';
 import '../utils/constants.dart';
 
 /// 本地存储服务
 ///
 /// 管理两个存储层：
 /// - `SharedPreferences`：应用设置（快捷键、数据目录、Git 远程地址）
-/// - 文件系统：指令数据（commands.json）
+/// - 文件系统：片段数据（snippets.json）
 class StorageService {
   static StorageService? _instance;
 
@@ -76,7 +76,7 @@ class StorageService {
     return '${home}\\${AppConstants.defaultDataDirName}';
   }
 
-  /// 确保数据目录和 commands.json 存在
+  /// 确保数据目录和 snippets.json 存在
   Future<Directory> ensureDataDir({String? customPath}) async {
     final dirPath = customPath ?? await getDataDirPath();
     if (customPath != null) {
@@ -86,40 +86,40 @@ class StorageService {
     if (!await dir.exists()) {
       await dir.create(recursive: true);
     }
-    // 确保 commands.json 存在
-    final file = File('${dir.path}\\${AppConstants.commandsFileName}');
+    // 确保 snippets.json 存在
+    final file = File('${dir.path}\\${AppConstants.snippetsFileName}');
     if (!await file.exists()) {
       await file.writeAsString('[]');
     }
     return dir;
   }
 
-  // ========== 指令 CRUD ==========
+  // ========== 片段 CRUD ==========
 
-  Future<String> _commandsFilePath() async {
+  Future<String> _snippetsFilePath() async {
     final dir = await getDataDirPath();
-    return '$dir\\${AppConstants.commandsFileName}';
+    return '$dir\\${AppConstants.snippetsFileName}';
   }
 
-  Future<List<Command>> loadCommands() async {
-    final path = await _commandsFilePath();
+  Future<List<Snippet>> loadSnippets() async {
+    final path = await _snippetsFilePath();
     final file = File(path);
     if (!await file.exists()) return [];
     try {
       final content = await file.readAsString();
       final list = jsonDecode(content) as List<dynamic>;
       return list
-          .map((e) => Command.fromJson(e as Map<String, dynamic>))
+          .map((e) => Snippet.fromJson(e as Map<String, dynamic>))
           .toList();
     } catch (e) {
       return [];
     }
   }
 
-  Future<void> saveCommands(List<Command> commands) async {
-    final path = await _commandsFilePath();
+  Future<void> saveSnippets(List<Snippet> snippets) async {
+    final path = await _snippetsFilePath();
     final file = File(path);
-    final content = jsonEncode(commands.map((c) => c.toJson()).toList());
+    final content = jsonEncode(snippets.map((c) => c.toJson()).toList());
     await file.writeAsString(content);
   }
 }

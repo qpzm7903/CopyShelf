@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/command_provider.dart';
+import '../providers/snippet_provider.dart';
 import 'search_overlay.dart';
 import 'settings_page.dart';
 
@@ -38,9 +38,9 @@ class _HomePageState extends State<HomePage> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      body: Consumer<CommandProvider>(
+      body: Consumer<SnippetProvider>(
         builder: (context, provider, _) {
-          if (provider.error != null && provider.commands.isEmpty) {
+          if (provider.error != null && provider.snippets.isEmpty) {
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),

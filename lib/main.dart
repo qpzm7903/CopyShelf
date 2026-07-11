@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'providers/command_provider.dart';
+import 'providers/snippet_provider.dart';
 import 'services/storage_service.dart';
 import 'services/git_service.dart';
 import 'services/hotkey_service.dart';
@@ -35,14 +35,14 @@ void main() async {
   final storage = await StorageService.instance;
   final git = await GitService.instance;
 
-  // 创建指令状态管理器
-  final commandProvider = CommandProvider(
+  // 创建片段状态管理器
+  final snippetProvider = SnippetProvider(
     storage: storage,
     git: git,
   );
 
-  // 完整初始化（数据目录、Git、加载指令）
-  await commandProvider.init();
+  // 完整初始化（数据目录、Git、加载片段）
+  await snippetProvider.init();
 
   // 注册全局快捷键：Ctrl+Alt+V
   if (Platform.isWindows) {
@@ -53,26 +53,26 @@ void main() async {
         } else {
           await windowManager.show();
           await windowManager.focus();
-          commandProvider.showSearch();
+          snippetProvider.showSearch();
         }
       },
     );
   }
 
-  runApp(CopyShelfApp(commandProvider: commandProvider));
+  runApp(CopyShelfApp(snippetProvider: snippetProvider));
 }
 
 class CopyShelfApp extends StatelessWidget {
-  final CommandProvider commandProvider;
+  final SnippetProvider snippetProvider;
 
-  const CopyShelfApp({super.key, required this.commandProvider});
+  const CopyShelfApp({super.key, required this.snippetProvider});
 
   @override
   Widget build(BuildContext context) {
     final defaultFontFamily = Platform.isWindows ? 'Microsoft YaHei UI' : null;
 
     return ChangeNotifierProvider.value(
-      value: commandProvider,
+      value: snippetProvider,
       child: MaterialApp(
         title: AppConstants.appName,
         debugShowCheckedModeBanner: false,

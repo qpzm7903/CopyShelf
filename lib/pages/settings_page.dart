@@ -1,14 +1,14 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../providers/command_provider.dart';
+import '../providers/snippet_provider.dart';
 import '../services/storage_service.dart';
 import '../services/git_service.dart';
 import '../utils/constants.dart';
 
 /// 设置页面
 ///
-/// 管理数据目录、Git 远程地址、快捷键、指令 CRUD。
+/// 管理数据目录、Git 远程地址、快捷键、片段 CRUD。
 class SettingsPage extends StatefulWidget {
   final VoidCallback? onBack;
 
@@ -110,8 +110,8 @@ class _SettingsPageState extends State<SettingsPage> {
     });
   }
 
-  Future<void> _saveCommand() async {
-    final provider = context.read<CommandProvider>();
+  Future<void> _saveSnippet() async {
+    final provider = context.read<SnippetProvider>();
     final name = _nameController.text.trim();
     final content = _contentController.text.trim();
 
@@ -123,7 +123,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     if (_editingId != null) {
-      await provider.updateCommand(
+      await provider.updateSnippet(
         id: _editingId!,
         name: name,
         content: content,
@@ -131,7 +131,7 @@ class _SettingsPageState extends State<SettingsPage> {
         tags: _tempTags,
       );
     } else {
-      await provider.addCommand(
+      await provider.addSnippet(
         name: name,
         content: content,
         description: _descController.text.trim(),
@@ -172,30 +172,30 @@ class _SettingsPageState extends State<SettingsPage> {
             TextButton.icon(
               onPressed: _startAdd,
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('添加指令'),
+              label: const Text('添加片段'),
             ),
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // ---- 指令编辑区 ----
-          if (_isEditing) _buildCommandEditor(),
+          // ---- 片段编辑区 ----
+          if (_isEditing) _buildSnippetEditor(),
           if (_isEditing) const SizedBox(height: 24),
 
-          // ---- 指令列表 ----
-          _buildSectionTitle('已有指令'),
+          // ---- 片段列表 ----
+          _buildSectionTitle('已有片段'),
           const SizedBox(height: 8),
-          Consumer<CommandProvider>(
+          Consumer<SnippetProvider>(
             builder: (context, provider, _) {
-              final commands = provider.commands;
-              if (commands.isEmpty) {
+              final snippets = provider.snippets;
+              if (snippets.isEmpty) {
                 return Card(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
                     child: Center(
                       child: Text(
-                        '还没有指令，点击右上角添加',
+                        '还没有片段，点击右上角添加',
                         style: TextStyle(color: Colors.grey[400]),
                       ),
                     ),
@@ -203,7 +203,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 );
               }
               return Column(
-                children: commands.map((cmd) => _buildCommandCard(cmd)).toList(),
+                children: snippets.map((snippet) => _buildSnippetCard(snippet)).toList(),
               );
             },
           ),
@@ -238,7 +238,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            '修改后需重启应用生效。指令数据存储在此目录的 commands.json 中。',
+            '修改后需重启应用生效。片段数据存储在此目录的 snippets.json 中。',
             style: TextStyle(fontSize: 12, color: Colors.grey[400]),
           ),
 
@@ -272,7 +272,7 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 4),
           Text(
-            '设置后每次增删改指令自动 commit & push，启动时自动 pull。',
+            '设置后每次增删改片段自动 commit & push，启动时自动 pull。',
             style: TextStyle(fontSize: 12, color: Colors.grey[400]),
           ),
 
@@ -302,7 +302,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildCommandEditor() {
+  Widget _buildSnippetEditor() {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -310,7 +310,7 @@ class _SettingsPageState extends State<SettingsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              _editingId != null ? '编辑指令' : '添加指令',
+              _editingId != null ? '编辑片段' : '添加片段',
               style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 12),
@@ -370,7 +370,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
-                  onPressed: _saveCommand,
+                  onPressed: _saveSnippet,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF6366F1),
                     foregroundColor: Colors.white,
@@ -385,13 +385,13 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  Widget _buildCommandCard(dynamic cmd) {
+  Widget _buildSnippetCard(dynamic snippet) {
     return Card(
       margin: const EdgeInsets.only(bottom: 6),
       child: ListTile(
-        title: Text(cmd.name),
-        subtitle: cmd.description.isNotEmpty
-            ? Text(cmd.description, maxLines: 1, overflow: TextOverflow.ellipsis)
+        title: Text(snippet.name),
+        subtitle: snippet.description.isNotEmpty
+            ? Text(snippet.description, maxLines: 1, overflow: TextOverflow.ellipsis)
             : null,
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
@@ -399,12 +399,12 @@ class _SettingsPageState extends State<SettingsPage> {
             IconButton(
               icon: const Icon(Icons.edit_outlined, size: 18),
               onPressed: () => _startEdit(
-                cmd.id, cmd.name, cmd.content, cmd.description, cmd.tags,
+                snippet.id, snippet.name, snippet.content, snippet.description, snippet.tags,
               ),
             ),
             IconButton(
               icon: const Icon(Icons.delete_outline, size: 18, color: Colors.red),
-              onPressed: () => _confirmDelete(cmd.id, cmd.name),
+              onPressed: () => _confirmDelete(snippet.id, snippet.name),
             ),
           ],
         ),
@@ -416,7 +416,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('删除指令'),
+        title: const Text('删除片段'),
         content: Text('确定删除 "$name" 吗？'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
@@ -430,7 +430,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
     if (confirmed == true) {
       if (!mounted) return;
-      await context.read<CommandProvider>().deleteCommand(id);
+      await context.read<SnippetProvider>().deleteSnippet(id);
     }
   }
 }

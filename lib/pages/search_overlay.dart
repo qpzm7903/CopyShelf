@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../providers/command_provider.dart';
+import '../providers/snippet_provider.dart';
 
 /// 搜索主界面（类 Spotlight 搜索框）
 ///
-/// 顶部是搜索输入框，下方是指令列表。
+/// 顶部是搜索输入框，下方是片段列表。
 /// 使用键盘上下键选择，回车粘贴。
 class SearchOverlay extends StatefulWidget {
   const SearchOverlay({super.key});
@@ -40,12 +40,12 @@ class _SearchOverlayState extends State<SearchOverlay> {
   }
 
   /// 处理键盘事件
-  KeyEventResult _handleKeyEvent(KeyEvent event, CommandProvider provider) {
+  KeyEventResult _handleKeyEvent(KeyEvent event, SnippetProvider provider) {
     if (event is! KeyDownEvent) return KeyEventResult.ignored;
 
     if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
       setState(() {
-        _selectedIndex = (_selectedIndex + 1) % provider.filteredCommands.length;
+        _selectedIndex = (_selectedIndex + 1) % provider.filteredSnippets.length;
       });
       return KeyEventResult.handled;
     }
@@ -53,7 +53,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
       setState(() {
         _selectedIndex = _selectedIndex - 1;
         if (_selectedIndex < 0) {
-          _selectedIndex = provider.filteredCommands.length - 1;
+          _selectedIndex = provider.filteredSnippets.length - 1;
         }
       });
       return KeyEventResult.handled;
@@ -71,9 +71,9 @@ class _SearchOverlayState extends State<SearchOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<CommandProvider>(
+    return Consumer<SnippetProvider>(
       builder: (context, provider, _) {
-        final commands = provider.filteredCommands;
+        final snippets = provider.filteredSnippets;
 
         return Focus(
           autofocus: true,
@@ -83,9 +83,9 @@ class _SearchOverlayState extends State<SearchOverlay> {
             children: [
               _buildSearchBar(context, provider),
               Expanded(
-                child: commands.isEmpty
+                child: snippets.isEmpty
                     ? _buildEmptyState(provider)
-                    : _buildCommandList(context, provider, commands),
+                    : _buildSnippetList(context, provider, snippets),
               ),
             ],
           ),
@@ -94,7 +94,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
     );
   }
 
-  Widget _buildSearchBar(BuildContext context, CommandProvider provider) {
+  Widget _buildSearchBar(BuildContext context, SnippetProvider provider) {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
       decoration: const BoxDecoration(
@@ -107,7 +107,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
         controller: _searchController,
         autofocus: true,
         decoration: const InputDecoration(
-          hintText: '搜索指令…',
+          hintText: '搜索片段…',
           prefixIcon: Icon(Icons.search, size: 20),
           isDense: true,
         ),
@@ -122,17 +122,17 @@ class _SearchOverlayState extends State<SearchOverlay> {
     );
   }
 
-  Widget _buildCommandList(
+  Widget _buildSnippetList(
     BuildContext context,
-    CommandProvider provider,
-    List<dynamic> commands,
+    SnippetProvider provider,
+    List<dynamic> snippets,
   ) {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 4),
-      itemCount: commands.length,
+      itemCount: snippets.length,
       separatorBuilder: (_, __) => const Divider(indent: 16, endIndent: 16),
       itemBuilder: (context, index) {
-        final cmd = commands[index];
+        final snippet = snippets[index];
         final isSelected = index == _selectedIndex;
 
         return ListTile(
@@ -140,13 +140,13 @@ class _SearchOverlayState extends State<SearchOverlay> {
           selectedTileColor: const Color(0xFFF0F0FF),
           leading: const Icon(Icons.code, size: 20, color: Color(0xFF6366F1)),
           title: Text(
-            cmd.name,
+            snippet.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          subtitle: cmd.description.isNotEmpty
+          subtitle: snippet.description.isNotEmpty
               ? Text(
-                  cmd.description,
+                  snippet.description,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 )
@@ -154,8 +154,8 @@ class _SearchOverlayState extends State<SearchOverlay> {
           trailing: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (cmd.tags.isNotEmpty)
-                ...cmd.tags.take(2).map(
+              if (snippet.tags.isNotEmpty)
+                ...snippet.tags.take(2).map(
                       (tag) => Padding(
                         padding: const EdgeInsets.only(left: 4),
                         child: _TagChip(label: tag),
@@ -163,7 +163,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
                     ),
               const SizedBox(width: 8),
               Text(
-                '${cmd.frequency}',
+                '${snippet.frequency}',
                 style: const TextStyle(
                   fontSize: 11,
                   color: Color(0xFFCCCCCC),
@@ -172,7 +172,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
             ],
           ),
           onTap: () {
-            provider.useCommand(cmd.id);
+            provider.useSnippet(snippet.id);
             provider.hideSearch();
           },
         );
@@ -180,12 +180,12 @@ class _SearchOverlayState extends State<SearchOverlay> {
     );
   }
 
-  Widget _buildEmptyState(CommandProvider provider) {
+  Widget _buildEmptyState(SnippetProvider provider) {
     if (provider.isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (provider.searchQuery.isEmpty && provider.commands.isEmpty) {
+    if (provider.searchQuery.isEmpty && provider.snippets.isEmpty) {
       return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -193,12 +193,12 @@ class _SearchOverlayState extends State<SearchOverlay> {
             Icon(Icons.inbox_outlined, size: 48, color: Colors.grey[300]),
             const SizedBox(height: 12),
             Text(
-              '还没有指令',
+              '还没有片段',
               style: TextStyle(fontSize: 14, color: Colors.grey[400]),
             ),
             const SizedBox(height: 4),
             Text(
-              '在设置中添加你的第一条指令',
+              '在设置中添加你的第一条片段',
               style: TextStyle(fontSize: 12, color: Colors.grey[350]),
             ),
           ],
@@ -208,16 +208,16 @@ class _SearchOverlayState extends State<SearchOverlay> {
 
     return Center(
       child: Text(
-        '未找到匹配的指令',
+        '未找到匹配的片段',
         style: TextStyle(fontSize: 14, color: Colors.grey[400]),
       ),
     );
   }
 
-  void _pasteSelected(CommandProvider provider) {
-    if (provider.filteredCommands.isEmpty) return;
-    final cmd = provider.filteredCommands[_selectedIndex];
-    provider.useCommand(cmd.id);
+  void _pasteSelected(SnippetProvider provider) {
+    if (provider.filteredSnippets.isEmpty) return;
+    final snippet = provider.filteredSnippets[_selectedIndex];
+    provider.useSnippet(snippet.id);
     provider.hideSearch();
   }
 }

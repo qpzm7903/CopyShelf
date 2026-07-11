@@ -4,7 +4,7 @@ import 'win32_paste.dart' as win32_paste;
 
 /// 粘贴服务
 ///
-/// 将指令内容写入系统剪贴板，并在 Windows 平台上模拟 Ctrl+V 按键，
+/// 将片段内容写入系统剪贴板，并在 Windows 平台上模拟 Ctrl+V 按键，
 /// 把内容自动粘贴到前台窗口。
 ///
 /// Windows 实现使用 win32 包（纯 Dart 绑定）调用 User32 API：

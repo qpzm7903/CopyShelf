@@ -8,7 +8,7 @@ class AppConstants {
   static const String defaultDataDirName = '.copyshelf';
 
   // 数据文件名
-  static const String commandsFileName = 'commands.json';
+  static const String snippetsFileName = 'snippets.json';
 
   // 快捷键
   static const String defaultHotkey = 'Ctrl+Alt+V';

@@ -1,5 +1,5 @@
 name: copyshelf
-description: Windows 剪贴板指令管理器 — 快速搜索并粘贴你配置的指令/命令片段
+description: Windows 片段启动器 — 快速搜索并粘贴你预先配置的文本片段
 publish_to: 'none'
 version: 0.1.0
 

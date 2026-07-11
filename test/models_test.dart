@@ -1,10 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:copyshelf/models/command.dart';
+import 'package:copyshelf/models/snippet.dart';
 
 void main() {
-  group('Command model', () {
+  group('Snippet model', () {
     test('toJson / fromJson roundtrip', () {
-      final command = Command(
+      final snippet = Snippet(
         id: 'test-id',
         name: 'git amend',
         content: 'git commit --amend --no-edit',
@@ -15,17 +15,17 @@ void main() {
         createdAt: DateTime(2026, 7, 1, 10, 0, 0),
       );
 
-      final json = command.toJson();
-      final restored = Command.fromJson(json);
+      final json = snippet.toJson();
+      final restored = Snippet.fromJson(json);
 
-      expect(restored.id, command.id);
-      expect(restored.name, command.name);
-      expect(restored.content, command.content);
-      expect(restored.description, command.description);
-      expect(restored.tags, command.tags);
-      expect(restored.frequency, command.frequency);
-      expect(restored.lastUsedAt, command.lastUsedAt);
-      expect(restored.createdAt, command.createdAt);
+      expect(restored.id, snippet.id);
+      expect(restored.name, snippet.name);
+      expect(restored.content, snippet.content);
+      expect(restored.description, snippet.description);
+      expect(restored.tags, snippet.tags);
+      expect(restored.frequency, snippet.frequency);
+      expect(restored.lastUsedAt, snippet.lastUsedAt);
+      expect(restored.createdAt, snippet.createdAt);
     });
 
     test('fromJson handles missing optional fields', () {
@@ -35,50 +35,50 @@ void main() {
         'content': 'test content',
       };
 
-      final command = Command.fromJson(json);
-      expect(command.id, 'test-id');
-      expect(command.name, 'test');
-      expect(command.content, 'test content');
-      expect(command.description, '');
-      expect(command.tags, []);
-      expect(command.frequency, 0);
-      expect(command.lastUsedAt, isNotNull);
-      expect(command.createdAt, isNotNull);
+      final snippet = Snippet.fromJson(json);
+      expect(snippet.id, 'test-id');
+      expect(snippet.name, 'test');
+      expect(snippet.content, 'test content');
+      expect(snippet.description, '');
+      expect(snippet.tags, []);
+      expect(snippet.frequency, 0);
+      expect(snippet.lastUsedAt, isNotNull);
+      expect(snippet.createdAt, isNotNull);
     });
 
     test('copyWith creates a copy with overridden fields', () {
-      final command = Command(
+      final snippet = Snippet(
         id: 'test-id',
         name: 'git amend',
         content: 'git commit --amend --no-edit',
       );
 
-      final copy = command.copyWith(
+      final copy = snippet.copyWith(
         name: 'git commit --amend',
         tags: ['git'],
       );
 
-      expect(copy.id, command.id);
+      expect(copy.id, snippet.id);
       expect(copy.name, 'git commit --amend');
-      expect(copy.content, command.content);
+      expect(copy.content, snippet.content);
       expect(copy.tags, ['git']);
-      expect(copy.frequency, command.frequency);
+      expect(copy.frequency, snippet.frequency);
     });
 
     test('tags default to empty list', () {
-      final command = Command(id: 'id', name: 'n', content: 'c');
-      expect(command.tags, []);
+      final snippet = Snippet(id: 'id', name: 'n', content: 'c');
+      expect(snippet.tags, []);
     });
 
     test('lastUsedAt and createdAt default to now', () {
       final before = DateTime.now();
-      final command = Command(id: 'id', name: 'n', content: 'c');
+      final snippet = Snippet(id: 'id', name: 'n', content: 'c');
       final after = DateTime.now();
 
-      expect(command.lastUsedAt.isAfter(before) || command.lastUsedAt == before, isTrue);
-      expect(command.lastUsedAt.isBefore(after) || command.lastUsedAt == after, isTrue);
-      expect(command.createdAt.isAfter(before) || command.createdAt == before, isTrue);
-      expect(command.createdAt.isBefore(after) || command.createdAt == after, isTrue);
+      expect(snippet.lastUsedAt.isAfter(before) || snippet.lastUsedAt == before, isTrue);
+      expect(snippet.lastUsedAt.isBefore(after) || snippet.lastUsedAt == after, isTrue);
+      expect(snippet.createdAt.isAfter(before) || snippet.createdAt == before, isTrue);
+      expect(snippet.createdAt.isBefore(after) || snippet.createdAt == after, isTrue);
     });
   });
 }
