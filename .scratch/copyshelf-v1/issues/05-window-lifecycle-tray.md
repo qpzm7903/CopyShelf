@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # 05: 窗口生命周期 + 系统托盘
 
@@ -28,3 +28,13 @@ Status: ready-for-agent
 ## Blocked by
 
 - 03 (`03-paste-focus-chain-target-window.md`)
+
+## Comments
+
+- 2026-07-11: 代码完成。flutter analyze 零错误零警告，44 个测试全过。托盘库选用 tray_manager（与 window_manager 同生态），PRD 技术栈已同步更新。
+- 手动验收清单（需 Windows 实机）：
+  - [ ] 呼出后点击其他应用，窗口自动隐藏
+  - [ ] 点 X 后进程仍在，快捷键可再呼出
+  - [ ] 托盘「退出」结束进程，退出后快捷键无响应
+  - [ ] 托盘「打开设置」正常
+  - [ ] 快捷键 toggle 往复多次无异常
