@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done
 
 # 06: 拼音关键词匹配
 
@@ -25,3 +25,7 @@ Status: ready-for-agent
 ## Blocked by
 
 - 01 (`01-rename-command-to-snippet.md`)
+
+## Comments
+
+- 2026-07-11: 完成。44 个测试全过。多音字按 lpinyin 默认读音（如「重构」= zhonggou），符合工单约定不做多读音展开。
