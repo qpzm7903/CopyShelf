@@ -7,6 +7,7 @@ import 'providers/snippet_provider.dart';
 import 'services/storage_service.dart';
 import 'services/git_service.dart';
 import 'services/hotkey_service.dart';
+import 'services/single_instance_service.dart';
 import 'services/target_window_service.dart';
 import 'services/tray_service.dart';
 import 'theme/app_theme.dart';
@@ -16,6 +17,18 @@ import 'utils/hotkey.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 单实例锁：已有实例在运行则唤醒它并退出本进程。
+  // wake 回调此刻还拿不到窗口逻辑，先经由间接层，初始化完成后再赋值。
+  Future<void> Function()? wakeHandler;
+  final singleInstance = SingleInstanceService();
+  final lockAcquired = await singleInstance.tryAcquire(
+    onWake: () async => wakeHandler?.call(),
+  );
+  if (!lockAcquired) {
+    await SingleInstanceService.notifyExisting();
+    exit(0);
+  }
 
   // 初始化窗口管理器
   await windowManager.ensureInitialized();
@@ -62,6 +75,16 @@ void main() async {
     }
   }
 
+  // 次实例唤醒：无论当前是否可见都呼出并聚焦搜索窗（与 toggle 不同，不隐藏）
+  wakeHandler = () async {
+    if (!await windowManager.isVisible()) {
+      TargetWindowService.capture();
+    }
+    await windowManager.show();
+    await windowManager.focus();
+    snippetProvider.showSearch();
+  };
+
   if (Platform.isWindows) {
     // 注册全局快捷键（默认 Ctrl+Alt+V，可在设置中修改）
     final hotkey = Hotkey.parse(storage.hotkey) ?? Hotkey.defaultHotkey;
@@ -87,8 +110,9 @@ void main() async {
         await windowManager.focus();
       },
       onExit: () async {
-        // 退出前清理快捷键注册与托盘图标
+        // 退出前清理快捷键注册、单实例锁与托盘图标
         await HotkeyService.stop();
+        await singleInstance.dispose();
         await tray.dispose();
         await windowManager.setPreventClose(false);
         await windowManager.destroy();
