@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:win32/win32.dart' show WindowsException;
 import 'package:win32_registry/win32_registry.dart';
 
 /// 开机自启服务
@@ -59,6 +60,9 @@ class WindowsRunKeyStore implements RunKeyStore {
       final value = key.getValue(valueName);
       if (value is StringValue) return value.value;
       return null;
+    } on WindowsException {
+      // 值不存在（0x80070002）：未启用自启，是正常状态而非错误
+      return null;
     } finally {
       key.close();
     }
@@ -78,9 +82,9 @@ class WindowsRunKeyStore implements RunKeyStore {
   void delete() {
     final key = _openKey();
     try {
-      if (key.getValue(valueName) != null) {
-        key.deleteValue(valueName);
-      }
+      key.deleteValue(valueName);
+    } on WindowsException {
+      // 值本就不存在：视为已删除
     } finally {
       key.close();
     }
