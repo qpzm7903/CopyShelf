@@ -129,15 +129,26 @@ class _SettingsPageState extends State<SettingsPage> {
     final remote = _gitRemoteController.text.trim();
     storage.gitRemote = remote.isEmpty ? null : remote;
 
+    String message = 'Git 远程地址已保存';
     if (remote.isNotEmpty) {
       final dataDir = await storage.getDataDirPath();
       final git = await GitService.instance;
-      await git.setRemote(dataDir, remote);
+      // 首次同步引导：scaffold 设备自动以远端为准（issue 07）
+      final notice = await git.configureRemote(dataDir, remote);
+      if (notice != null) {
+        message = notice;
+      } else {
+        // 可能已采用远端数据，刷新片段列表
+        if (mounted) {
+          await context.read<SnippetProvider>().loadSnippets();
+        }
+        message = 'Git 远程地址已保存，片段列表已同步';
+      }
     }
 
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Git 远程地址已保存')),
+      SnackBar(content: Text(message)),
     );
   }
 

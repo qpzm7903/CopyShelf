@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: done (v0.1.6)
 
 # 07: 第二台设备首次同步的引导流程
 

@@ -88,6 +88,74 @@ class GitService {
     await _git(dataDir, ['remote', 'add', 'origin', remoteUrl]);
   }
 
+  /// 配置远端并完成首次同步引导（issue 07）。
+  ///
+  /// 全新设备的本地仓库是 scaffold（空片段列表 + init commit），与远端历史
+  /// 不相关，直接 pull --rebase 必然 add/add 冲突。此方法在关联远端后：
+  /// - 远端为空：直接成功，后续正常推送即可
+  /// - 远端有数据 + 本地是 scaffold：自动以远端为准（用户无感知）
+  /// - 远端有数据 + 本地有真实片段：不动任何一方，返回可读提示
+  ///
+  /// 返回 null 表示成功，非 null 为用户可读的提示信息。
+  Future<String?> configureRemote(String dataDir, String remoteUrl) async {
+    try {
+      await setRemote(dataDir, remoteUrl);
+
+      final fetch = await _git(dataDir, ['fetch', 'origin']);
+      if (fetch.exitCode != 0) {
+        return 'Git fetch 失败：${(fetch.stderr as String? ?? '').trim()}';
+      }
+
+      final remoteBranch = await _remoteDefaultBranch(dataDir);
+      if (remoteBranch == null) {
+        // 远端还是空仓库：无须引导，后续 commitAndPush 会推上去
+        return null;
+      }
+
+      if (await isPristineScaffold(dataDir)) {
+        // 本地是未使用过的 scaffold：以远端为准完成首次同步
+        final checkout = await _git(
+            dataDir, ['checkout', '-B', remoteBranch, 'origin/$remoteBranch']);
+        if (checkout.exitCode != 0) {
+          return '首次同步失败：${(checkout.stderr as String? ?? '').trim()}';
+        }
+        await _git(dataDir, ['reset', '--hard', 'origin/$remoteBranch']);
+        return null;
+      }
+
+      return '远端仓库已有片段数据，本地也已有片段，双方数据都已保留。'
+          '同步时如出现冲突，请到数据目录手动合并：\n$dataDir';
+    } catch (e) {
+      return 'Git 操作异常：$e';
+    }
+  }
+
+  /// 远端默认分支名（HEAD 指向）；远端为空仓库时返回 null
+  Future<String?> _remoteDefaultBranch(String dataDir) async {
+    final result =
+        await _git(dataDir, ['ls-remote', '--symref', 'origin', 'HEAD']);
+    if (result.exitCode != 0) return null;
+    final match = RegExp(r'ref: refs/heads/(\S+)\s+HEAD')
+        .firstMatch(result.stdout as String? ?? '');
+    return match?.group(1);
+  }
+
+  /// 本地是否仍是未使用过的 scaffold（片段列表为空）。
+  ///
+  /// 片段为空时采用远端数据不会丢失任何用户内容（使用统计不入 Git，ADR-0001）。
+  Future<bool> isPristineScaffold(String dataDir) async {
+    final file = File(
+        '$dataDir${Platform.pathSeparator}${AppConstants.snippetsFileName}');
+    if (!await file.exists()) return true;
+    try {
+      final parsed = jsonDecode(await file.readAsString());
+      return parsed is List && parsed.isEmpty;
+    } catch (_) {
+      // 文件损坏或格式异常：宁可保守，不自动覆盖
+      return false;
+    }
+  }
+
   /// 拉取远端变更（pull --rebase）
   ///
   /// 返回 null 表示成功（或无需拉取），非 null 为用户可读的错误信息。
