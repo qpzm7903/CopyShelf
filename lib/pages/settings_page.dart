@@ -5,6 +5,7 @@ import '../models/snippet.dart';
 import '../providers/snippet_provider.dart';
 import '../services/storage_service.dart';
 import '../services/git_service.dart';
+import '../services/autostart_service.dart';
 import '../services/hotkey_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/constants.dart';
@@ -30,6 +31,11 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Hotkey _hotkey = Hotkey.defaultHotkey;
   bool _isSyncing = false;
+  bool _isAutostartEnabled = false;
+
+  /// 仅 Windows 上创建；其他平台不展示自启开关
+  final AutostartService? _autostart =
+      Platform.isWindows ? AutostartService(WindowsRunKeyStore()) : null;
 
   @override
   void initState() {
@@ -52,7 +58,27 @@ class _SettingsPageState extends State<SettingsPage> {
       _dataDirController.text = dataDir;
       _gitRemoteController.text = storage.gitRemote ?? '';
       _hotkey = Hotkey.parse(storage.hotkey) ?? Hotkey.defaultHotkey;
+      _isAutostartEnabled = _autostart?.isEnabled ?? false;
     });
+  }
+
+  // ---------- 开机自启 ----------
+
+  void _toggleAutostart(bool enabled) {
+    final autostart = _autostart;
+    if (autostart == null) return;
+    try {
+      if (enabled) {
+        autostart.enable();
+      } else {
+        autostart.disable();
+      }
+      setState(() => _isAutostartEnabled = enabled);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('开机自启设置失败: $e')),
+      );
+    }
   }
 
   // ---------- 快捷键 ----------
@@ -223,6 +249,23 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
           ),
+          if (_autostart != null) ...[
+            const SizedBox(height: 28),
+            _buildSectionHeader('常规'),
+            Card(
+              child: SwitchListTile(
+                key: const Key('autostart-switch'),
+                title: const Text('开机自启', style: TextStyle(fontSize: 13.5)),
+                subtitle: const Text(
+                  '登录 Windows 后自动在后台启动 CopyShelf',
+                  style: TextStyle(fontSize: 11.5, color: AppTheme.inkFaint),
+                ),
+                value: _isAutostartEnabled,
+                onChanged: _toggleAutostart,
+                dense: true,
+              ),
+            ),
+          ],
           const SizedBox(height: 28),
           _buildSectionHeader('数据与同步'),
           Card(
