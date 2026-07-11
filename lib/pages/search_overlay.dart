@@ -20,23 +20,10 @@ class _SearchOverlayState extends State<SearchOverlay> {
   int _selectedIndex = 0;
 
   @override
-  void initState() {
-    super.initState();
-    _focusNode.addListener(_onFocusChange);
-  }
-
-  @override
   void dispose() {
-    _focusNode.removeListener(_onFocusChange);
     _searchController.dispose();
     _focusNode.dispose();
     super.dispose();
-  }
-
-  void _onFocusChange() {
-    if (!_focusNode.hasFocus) {
-      _focusNode.requestFocus();
-    }
   }
 
   /// 处理键盘事件

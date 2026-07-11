@@ -17,6 +17,7 @@ dependencies:
   win32: ^5.5.0
   ffi: ^2.1.0
   lpinyin: ^2.0.3
+  tray_manager: ^0.5.3
 
 dev_dependencies:
   flutter_test:
@@ -25,3 +26,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/app_icon.ico

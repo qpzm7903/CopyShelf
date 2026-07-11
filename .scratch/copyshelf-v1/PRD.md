@@ -42,7 +42,7 @@ Status: ready-for-agent
 - **状态管理**: Provider
 - **本地存储**: `shared_preferences`（设置）/ JSON 文件（片段定义、使用统计）
 - **窗口管理**: `window_manager`
-- **系统托盘**: `system_tray`
+- **系统托盘**: `tray_manager`（与 window_manager 同生态，维护更活跃）
 - **全局快捷键**: `win32` 包（RegisterHotKey + Isolate 消息循环，已实现）
 - **粘贴实现**: `win32` 包纯 Dart 调用（剪贴板写入 + SendInput 模拟 `Ctrl+V`）
 - **拼音匹配**: `lpinyin` 或同类 Dart 库

@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, exit;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -8,6 +8,7 @@ import 'services/storage_service.dart';
 import 'services/git_service.dart';
 import 'services/hotkey_service.dart';
 import 'services/target_window_service.dart';
+import 'services/tray_service.dart';
 import 'theme/app_theme.dart';
 import 'pages/home_page.dart';
 import 'utils/constants.dart';
@@ -28,6 +29,8 @@ void main() async {
   );
 
   await windowManager.waitUntilReadyToShow(windowOptions, () async {
+    // 点 X 不结束进程：交给 HomePage.onWindowClose 隐藏到托盘
+    await windowManager.setPreventClose(true);
     await windowManager.show();
     await windowManager.focus();
   });
@@ -45,21 +48,42 @@ void main() async {
   // 完整初始化（数据目录、Git、加载片段）
   await snippetProvider.init();
 
-  // 注册全局快捷键：Ctrl+Alt+V
+  // 呼出/隐藏搜索窗口（快捷键与托盘左键共用）
+  Future<void> toggleSearchWindow() async {
+    if (await windowManager.isVisible()) {
+      await windowManager.hide();
+    } else {
+      // 必须在 show 之前捕获：show 之后前台窗口就是 CopyShelf 自己了
+      TargetWindowService.capture();
+      await windowManager.show();
+      await windowManager.focus();
+      snippetProvider.showSearch();
+    }
+  }
+
   if (Platform.isWindows) {
-    await HotkeyService.start(
-      onTriggered: () async {
-        if (await windowManager.isVisible()) {
-          await windowManager.hide();
-        } else {
-          // 必须在 show 之前捕获：show 之后前台窗口就是 CopyShelf 自己了
-          TargetWindowService.capture();
-          await windowManager.show();
-          await windowManager.focus();
-          snippetProvider.showSearch();
-        }
+    // 注册全局快捷键：Ctrl+Alt+V
+    await HotkeyService.start(onTriggered: toggleSearchWindow);
+
+    // 系统托盘：左键切换窗口，右键菜单打开设置/退出
+    late final TrayService tray;
+    tray = TrayService(
+      onToggleWindow: toggleSearchWindow,
+      onOpenSettings: () async {
+        snippetProvider.openSettings();
+        await windowManager.show();
+        await windowManager.focus();
+      },
+      onExit: () async {
+        // 退出前清理快捷键注册与托盘图标
+        await HotkeyService.stop();
+        await tray.dispose();
+        await windowManager.setPreventClose(false);
+        await windowManager.destroy();
+        exit(0);
       },
     );
+    await tray.init();
   }
 
   runApp(CopyShelfApp(snippetProvider: snippetProvider));

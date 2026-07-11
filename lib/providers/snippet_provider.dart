@@ -283,6 +283,21 @@ class SnippetProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ========== 设置页导航（托盘菜单也需要打开设置，故放在 Provider） ==========
+
+  bool _isSettingsOpen = false;
+  bool get isSettingsOpen => _isSettingsOpen;
+
+  void openSettings() {
+    _isSettingsOpen = true;
+    notifyListeners();
+  }
+
+  void closeSettings() {
+    _isSettingsOpen = false;
+    notifyListeners();
+  }
+
   // ========== 内部方法 ==========
 
   Future<void> _persistAndSync(String commitMessage) async {
