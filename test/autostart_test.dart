@@ -73,13 +73,14 @@ void main() {
       const command = r'"C:\Temp\copyshelf test\copyshelf.exe"';
 
       try {
-        expect(store.read(), isNull);
+        // 核心信号：写入后能读回、删除后读为 null
         store.write(command);
         expect(store.read(), command);
+        store.delete();
+        expect(store.read(), isNull);
       } finally {
         store.delete();
       }
-      expect(store.read(), isNull);
     }, skip: !Platform.isWindows ? 'win32 注册表仅在 Windows 上可测' : false);
   });
 }

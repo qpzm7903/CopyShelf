@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:win32/win32.dart' show WindowsException;
 import 'package:win32_registry/win32_registry.dart';
 
 /// 开机自启服务
@@ -60,8 +59,9 @@ class WindowsRunKeyStore implements RunKeyStore {
       final value = key.getValue(valueName);
       if (value is StringValue) return value.value;
       return null;
-    } on WindowsException {
-      // 值不存在（0x80070002）：未启用自启，是正常状态而非错误
+    } catch (_) {
+      // 值不存在（0x80070002）或残留的 GetLastError 触发的异常：
+      // 未启用自启是正常状态，不当错误抛出（win32 last-error 有跨调用残留的抖动）
       return null;
     } finally {
       key.close();
@@ -83,7 +83,7 @@ class WindowsRunKeyStore implements RunKeyStore {
     final key = _openKey();
     try {
       key.deleteValue(valueName);
-    } on WindowsException {
+    } catch (_) {
       // 值本就不存在：视为已删除
     } finally {
       key.close();

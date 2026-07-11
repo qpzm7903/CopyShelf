@@ -187,12 +187,13 @@ class SnippetProvider extends ChangeNotifier {
 
   // ========== 终端多行粘贴护栏 ==========
 
-  /// 该片段此刻粘贴是否需要先弹终端多行确认框
-  bool needsTerminalPasteConfirm(String id) {
+  /// 该片段此刻粘贴是否需要先弹终端多行确认框。
+  /// [contentOverride]：模板渲染后的最终粘贴内容（判定以实际粘贴内容为准）。
+  bool needsTerminalPasteConfirm(String id, {String? contentOverride}) {
     final index = _snippets.indexWhere((s) => s.id == id);
     if (index == -1) return false;
     return shouldConfirmTerminalPaste(
-      content: _snippets[index].content,
+      content: contentOverride ?? _snippets[index].content,
       targetProcessName: _targetProcessName(),
       suppressed: _storage.suppressTerminalPasteWarning,
     );
@@ -206,7 +207,8 @@ class SnippetProvider extends ChangeNotifier {
   // ========== 粘贴（记录本机使用统计，不触发 Git） ==========
 
   /// 记录片段被使用一次并粘贴。只写本地统计文件（ADR-0001）。
-  Future<void> useSnippet(String id) async {
+  /// [contentOverride]：占位符模板渲染后的最终内容（不改片段定义本身）。
+  Future<void> useSnippet(String id, {String? contentOverride}) async {
     final index = _snippets.indexWhere((s) => s.id == id);
     if (index == -1) return;
 
@@ -215,7 +217,8 @@ class SnippetProvider extends ChangeNotifier {
     notifyListeners();
 
     // 粘贴到目标窗口
-    final outcome = await _paste(_snippets[index].content);
+    final outcome =
+        await _paste(contentOverride ?? _snippets[index].content);
     switch (outcome) {
       case PasteOutcome.pasted:
       case PasteOutcome.copiedOnly:

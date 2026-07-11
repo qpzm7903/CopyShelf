@@ -6,6 +6,7 @@ import '../providers/snippet_provider.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/hotkey.dart';
+import '../utils/template.dart';
 import '../widgets/key_caps.dart';
 
 /// 搜索主界面（类 Spotlight 搜索框）
@@ -128,18 +129,41 @@ class _SearchOverlayState extends State<SearchOverlay> {
     if (index < 0 || index >= snippets.length) return;
     final snippet = snippets[index];
 
-    // 终端多行护栏：多行片段粘进终端会被逐行执行，先确认
-    if (provider.needsTerminalPasteConfirm(snippet.id)) {
-      final confirmed = await _confirmTerminalPaste(provider, snippet);
+    // 占位符模板：有占位符先填表；无占位符也渲染以反转义字面 {{ }}
+    var values = <String, String>{};
+    final placeholders = parsePlaceholders(snippet.content);
+    if (placeholders.isNotEmpty) {
+      final filled = await _promptPlaceholders(snippet.name, placeholders);
+      if (filled == null) return; // 用户取消
+      values = filled;
+    }
+    final content = renderTemplate(snippet.content, values);
+
+    // 终端多行护栏：以最终粘贴内容判定，多行片段粘进终端会被逐行执行
+    if (provider.needsTerminalPasteConfirm(snippet.id,
+        contentOverride: content)) {
+      final confirmed = await _confirmTerminalPaste(provider, content);
       if (confirmed != true) return;
     }
 
-    provider.useSnippet(snippet.id);
+    provider.useSnippet(snippet.id, contentOverride: content);
     provider.hideSearch();
   }
 
+  /// 占位符填表对话框；返回 null 表示用户取消
+  Future<Map<String, String>?> _promptPlaceholders(
+      String snippetName, List<String> placeholders) {
+    return showDialog<Map<String, String>>(
+      context: context,
+      builder: (ctx) => _PlaceholderForm(
+        snippetName: snippetName,
+        placeholders: placeholders,
+      ),
+    );
+  }
+
   Future<bool?> _confirmTerminalPaste(
-      SnippetProvider provider, Snippet snippet) {
+      SnippetProvider provider, String content) {
     var suppressChecked = false;
     return showDialog<bool>(
       context: context,
@@ -165,7 +189,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: SingleChildScrollView(
-                  child: Text(snippet.content, style: AppTheme.mono()),
+                  child: Text(content, style: AppTheme.mono()),
                 ),
               ),
               CheckboxListTile(
@@ -521,6 +545,82 @@ class _TagChip extends StatelessWidget {
         label,
         style: const TextStyle(fontSize: 10.5, color: AppTheme.inkSecondary),
       ),
+    );
+  }
+}
+
+/// 占位符填表对话框：自管理 controller，退出动画期间不会用到已释放的控制器
+class _PlaceholderForm extends StatefulWidget {
+  final String snippetName;
+  final List<String> placeholders;
+
+  const _PlaceholderForm({
+    required this.snippetName,
+    required this.placeholders,
+  });
+
+  @override
+  State<_PlaceholderForm> createState() => _PlaceholderFormState();
+}
+
+class _PlaceholderFormState extends State<_PlaceholderForm> {
+  late final Map<String, TextEditingController> _controllers = {
+    for (final name in widget.placeholders) name: TextEditingController(),
+  };
+
+  @override
+  void dispose() {
+    for (final c in _controllers.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  Map<String, String> _collect() =>
+      _controllers.map((name, c) => MapEntry(name, c.text));
+
+  @override
+  Widget build(BuildContext context) {
+    final placeholders = widget.placeholders;
+    return AlertDialog(
+      key: const Key('placeholder-form'),
+      title: Text('填写「${widget.snippetName}」的占位符'),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < placeholders.length; i++)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: TextField(
+                  key: Key('placeholder-field-${placeholders[i]}'),
+                  controller: _controllers[placeholders[i]],
+                  autofocus: i == 0,
+                  style: const TextStyle(fontSize: 13.5),
+                  decoration: InputDecoration(
+                    labelText: placeholders[i],
+                    isDense: true,
+                  ),
+                  onSubmitted: i == placeholders.length - 1
+                      ? (_) => Navigator.pop(context, _collect())
+                      : null,
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        TextButton(
+          key: const Key('placeholder-submit'),
+          onPressed: () => Navigator.pop(context, _collect()),
+          child: const Text('粘贴'),
+        ),
+      ],
     );
   }
 }
