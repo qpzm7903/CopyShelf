@@ -5,6 +5,7 @@ import '../models/snippet_stats.dart';
 import '../services/storage_service.dart';
 import '../services/git_service.dart';
 import '../services/paste_service.dart';
+import '../utils/search_index.dart';
 
 /// 片段状态管理
 ///
@@ -23,6 +24,9 @@ class SnippetProvider extends ChangeNotifier {
   List<Snippet> _snippets = [];
   List<Snippet> _filteredSnippets = [];
   Map<String, SnippetStats> _stats = {};
+
+  /// 片段 id → 预计算的检索串（含拼音），加载/变更时重建，按键时只做子串比较
+  Map<String, String> _searchIndex = {};
   String _searchQuery = '';
   bool _isLoading = false;
   String? _error;
@@ -58,6 +62,9 @@ class SnippetProvider extends ChangeNotifier {
   Future<void> loadSnippets() async {
     _snippets = await _storage.loadSnippets();
     _stats = await _storage.loadStats();
+    _searchIndex = {
+      for (final s in _snippets) s.id: buildSearchIndex(s),
+    };
     _applyFilter();
     notifyListeners();
   }
@@ -127,9 +134,8 @@ class SnippetProvider extends ChangeNotifier {
     } else {
       final lowerQuery = _searchQuery.toLowerCase();
       _filteredSnippets = _snippets.where((snippet) {
-        return snippet.name.toLowerCase().contains(lowerQuery) ||
-            snippet.description.toLowerCase().contains(lowerQuery) ||
-            snippet.tags.any((t) => t.toLowerCase().contains(lowerQuery));
+        final index = _searchIndex[snippet.id] ??= buildSearchIndex(snippet);
+        return index.contains(lowerQuery);
       }).toList();
     }
     _sortSnippets();
@@ -203,6 +209,7 @@ class SnippetProvider extends ChangeNotifier {
     );
 
     _snippets = [..._snippets, snippet];
+    _searchIndex = {..._searchIndex, snippet.id: buildSearchIndex(snippet)};
     _applyFilter();
     notifyListeners();
 
@@ -231,6 +238,7 @@ class SnippetProvider extends ChangeNotifier {
       updated,
       ..._snippets.sublist(index + 1),
     ];
+    _searchIndex = {..._searchIndex, updated.id: buildSearchIndex(updated)};
     _applyFilter();
     notifyListeners();
 
@@ -244,6 +252,7 @@ class SnippetProvider extends ChangeNotifier {
 
     final snippet = _snippets[index];
     _snippets = _snippets.where((s) => s.id != id).toList();
+    _searchIndex = {..._searchIndex}..remove(id);
     if (_stats.containsKey(id)) {
       _stats = {..._stats}..remove(id);
       try {

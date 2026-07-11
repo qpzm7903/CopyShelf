@@ -365,6 +365,78 @@ void main() {
     });
   });
 
+  group('SnippetProvider 拼音关键词匹配', () {
+    test('中文名可被全拼、首字母、中文子串命中', () async {
+      await provider.addSnippet(name: '回复话术-催发货', content: '亲，仓库已加急～');
+      await provider.addSnippet(name: 'git amend', content: 'git commit --amend');
+
+      for (final query in ['huifu', 'hf', '回复']) {
+        provider.setSearchQuery(query);
+        expect(provider.filteredSnippets.length, 1,
+            reason: 'query "$query" 应恰好命中中文片段');
+        expect(provider.filteredSnippets[0].name, '回复话术-催发货');
+      }
+    });
+
+    test('英文片段子串匹配不回归', () async {
+      await provider.addSnippet(name: 'git amend', content: 'c');
+      await provider.addSnippet(name: '回复话术', content: 'c');
+
+      provider.setSearchQuery('amend');
+
+      expect(provider.filteredSnippets.length, 1);
+      expect(provider.filteredSnippets[0].name, 'git amend');
+    });
+
+    test('纯英文名不做拼音转换：hf 不误命中 git amend', () async {
+      await provider.addSnippet(name: 'git amend', content: 'c');
+
+      provider.setSearchQuery('hf');
+
+      expect(provider.filteredSnippets, isEmpty);
+    });
+
+    test('description 与 tags 上的拼音命中', () async {
+      await provider.addSnippet(
+        name: 'deploy',
+        content: './deploy.sh',
+        description: '部署到生产环境',
+        tags: ['运维'],
+      );
+      await provider.addSnippet(name: 'test', content: 'c');
+
+      provider.setSearchQuery('bushu'); // description 全拼
+      expect(provider.filteredSnippets.length, 1);
+      expect(provider.filteredSnippets[0].name, 'deploy');
+
+      provider.setSearchQuery('yw'); // tag 首字母
+      expect(provider.filteredSnippets.length, 1);
+      expect(provider.filteredSnippets[0].name, 'deploy');
+    });
+
+    test('中英混合名称：中文部分拼音可命中', () async {
+      await provider.addSnippet(name: 'prompt-重构代码', content: 'c');
+
+      provider.setSearchQuery('zhonggou');
+      expect(provider.filteredSnippets.length, 1);
+
+      provider.setSearchQuery('prompt');
+      expect(provider.filteredSnippets.length, 1);
+    });
+
+    test('编辑片段后检索索引同步更新', () async {
+      await provider.addSnippet(name: '回复话术', content: 'c');
+      final id = provider.snippets[0].id;
+
+      await provider.updateSnippet(id: id, name: '道歉模板', content: 'c');
+
+      provider.setSearchQuery('huifu');
+      expect(provider.filteredSnippets, isEmpty);
+      provider.setSearchQuery('daoqian');
+      expect(provider.filteredSnippets.length, 1);
+    });
+  });
+
   group('SnippetProvider paste outcomes', () {
     test('targetLost sets user-visible notice, stats still updated', () async {
       final p = SnippetProvider(

@@ -16,6 +16,7 @@ dependencies:
   uuid: 3.0.7
   win32: ^5.5.0
   ffi: ^2.1.0
+  lpinyin: ^2.0.3
 
 dev_dependencies:
   flutter_test:
