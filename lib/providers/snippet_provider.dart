@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/snippet.dart';
 import '../models/snippet_stats.dart';
+import '../models/sync_status.dart';
 import '../services/storage_service.dart';
 import '../services/git_service.dart';
 import '../services/paste_service.dart';
@@ -72,6 +73,35 @@ class SnippetProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Git 同步状态（供主窗常驻指示与设置页错误详情）
+  SyncStatus get syncStatus => _syncStatus;
+  SyncStatus _syncStatus = SyncStatus.initial;
+
+  void _setSyncing() {
+    _syncStatus = _syncStatus.copyWith(
+      state: SyncState.syncing,
+      lastSuccessAt: _syncStatus.lastSuccessAt,
+    );
+    notifyListeners();
+  }
+
+  void _setSyncOk() {
+    _syncStatus = SyncStatus(
+      state: SyncState.ok,
+      lastSuccessAt: DateTime.now(),
+    );
+    notifyListeners();
+  }
+
+  void _setSyncError(String message) {
+    _syncStatus = SyncStatus(
+      state: SyncState.error,
+      message: message,
+      lastSuccessAt: _syncStatus.lastSuccessAt,
+    );
+    notifyListeners();
+  }
+
   /// 某条片段在本机的使用统计（从未使用过返回 SnippetStats.zero）
   SnippetStats statsFor(String id) => _stats[id] ?? SnippetStats.zero;
 
@@ -102,14 +132,19 @@ class SnippetProvider extends ChangeNotifier {
       await _git.init(dataDir);
 
       // 启动时同步
+      if (_hasRemote) _setSyncing();
       final syncError = await _git.syncOnStart(dataDir);
       if (syncError != null) {
         _error = syncError;
+        _setSyncError(syncError);
+      } else if (_hasRemote) {
+        _setSyncOk();
       }
 
       await loadSnippets();
     } catch (e) {
       _error = '初始化失败: $e';
+      _setSyncError('初始化失败: $e');
     }
 
     _isLoading = false;
@@ -121,20 +156,30 @@ class SnippetProvider extends ChangeNotifier {
   /// 返回 true 表示同步成功；失败时错误信息写入 [error]。
   Future<bool> syncNow() async {
     _error = null;
-    notifyListeners();
+    _setSyncing();
     try {
       final dataDir = await _storage.getDataDirPath();
       final pullError = await _git.pull(dataDir);
       if (pullError != null) {
         _error = pullError;
-        notifyListeners();
+        _setSyncError(pullError);
         return false;
       }
       await loadSnippets();
+      _setSyncOk();
       return true;
     } catch (e) {
       _error = '同步失败: $e';
-      notifyListeners();
+      _setSyncError('同步失败: $e');
+      return false;
+    }
+  }
+
+  /// 是否已配置 Git 远端（读偏好失败时保守视为未配置）
+  bool get _hasRemote {
+    try {
+      return _storage.hasGitRemote;
+    } catch (_) {
       return false;
     }
   }
@@ -355,14 +400,17 @@ class SnippetProvider extends ChangeNotifier {
     try {
       await _storage.saveSnippets(_snippets);
       final dataDir = await _storage.getDataDirPath();
+      if (_hasRemote) _setSyncing();
       final error = await _git.commitAndPush(dataDir, commitMessage);
       if (error != null) {
         _error = error;
-        notifyListeners();
+        _setSyncError(error);
+      } else if (_hasRemote) {
+        _setSyncOk();
       }
     } catch (e) {
       _error = '保存失败: $e';
-      notifyListeners();
+      _setSyncError('保存失败: $e');
     }
   }
 }

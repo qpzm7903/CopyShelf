@@ -35,6 +35,11 @@ class MockStorageService extends StorageService {
     _storedStats = Map.from(stats);
   }
 
+  bool hasRemote = false;
+
+  @override
+  bool get hasGitRemote => hasRemote;
+
   bool _suppressTerminalPasteWarning = false;
 
   @override

@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../utils/hotkey.dart';
 import '../utils/template.dart';
 import '../widgets/key_caps.dart';
+import '../widgets/sync_indicator.dart';
 
 /// 搜索主界面（类 Spotlight 搜索框）
 ///
@@ -402,6 +403,8 @@ class _SearchOverlayState extends State<SearchOverlay> {
           const SizedBox(width: 4),
           const _FooterLabel('隐藏'),
           const Spacer(),
+          const SyncIndicator(),
+          const SizedBox(width: 12),
           _FooterLabel(count > 0 ? '$count 条片段' : ''),
         ],
       ),

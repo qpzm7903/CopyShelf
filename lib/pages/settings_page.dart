@@ -58,11 +58,20 @@ class _SettingsPageState extends State<SettingsPage> {
       _dataDirController.text = dataDir;
       _gitRemoteController.text = storage.gitRemote ?? '';
       _hotkey = Hotkey.parse(storage.hotkey) ?? Hotkey.defaultHotkey;
-      _isAutostartEnabled = _autostart?.isEnabled ?? false;
+      _isAutostartEnabled = _readAutostartSafely();
     });
   }
 
   // ---------- 开机自启 ----------
+
+  /// 读取自启状态，注册表异常一律降级为 false，绝不让设置页加载失败
+  bool _readAutostartSafely() {
+    try {
+      return _autostart?.isEnabled ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 
   void _toggleAutostart(bool enabled) {
     final autostart = _autostart;
@@ -315,6 +324,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     label: Text(_isSyncing ? '同步中…' : '立即同步',
                         style: const TextStyle(fontSize: 12.5)),
                   ),
+                  _buildSyncErrorPanel(),
                 ],
               ),
             ),
@@ -329,6 +339,41 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  /// 最近一次同步失败的详情面板；无错误时不占空间
+  Widget _buildSyncErrorPanel() {
+    return Consumer<SnippetProvider>(
+      builder: (context, provider, _) {
+        final status = provider.syncStatus;
+        if (!status.hasError) return const SizedBox.shrink();
+        return Container(
+          key: const Key('sync-error-panel'),
+          margin: const EdgeInsets.only(top: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFDECEA),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: const Color(0xFFE8B4B0)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.error_outline,
+                  size: 16, color: Color(0xFFB3352C)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SelectableText(
+                  status.message ?? '同步失败',
+                  style: const TextStyle(
+                      fontSize: 12, color: Color(0xFFB3352C)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

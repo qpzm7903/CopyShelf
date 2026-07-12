@@ -46,22 +46,30 @@ class WindowsRunKeyStore implements RunKeyStore {
 
   WindowsRunKeyStore({this.valueName = 'CopyShelf'});
 
-  RegistryKey _openKey() => Registry.openPath(
+  /// 打开 Run 键；键不存在（全新用户 profile 下 HKCU\...\Run 可能尚未创建）
+  /// 或权限受限时返回 null，由调用方按「未启用」处理。
+  RegistryKey? _openExisting() {
+    try {
+      return Registry.openPath(
         RegistryHive.currentUser,
         path: _runKeyPath,
         desiredAccessRights: AccessRights.allAccess,
       );
+    } catch (_) {
+      return null;
+    }
+  }
 
   @override
   String? read() {
-    final key = _openKey();
+    final key = _openExisting();
+    if (key == null) return null;
     try {
       final value = key.getValue(valueName);
       if (value is StringValue) return value.value;
       return null;
     } catch (_) {
-      // 值不存在（0x80070002）或残留的 GetLastError 触发的异常：
-      // 未启用自启是正常状态，不当错误抛出（win32 last-error 有跨调用残留的抖动）
+      // 值不存在或 win32 GetLastError 残留触发的异常：未启用自启，属正常状态
       return null;
     } finally {
       key.close();
@@ -70,7 +78,8 @@ class WindowsRunKeyStore implements RunKeyStore {
 
   @override
   void write(String command) {
-    final key = _openKey();
+    // createKey 在键不存在时创建（幂等），覆盖全新 profile 场景
+    final key = Registry.currentUser.createKey(_runKeyPath);
     try {
       key.createValue(RegistryValue.string(valueName, command));
     } finally {
@@ -80,7 +89,8 @@ class WindowsRunKeyStore implements RunKeyStore {
 
   @override
   void delete() {
-    final key = _openKey();
+    final key = _openExisting();
+    if (key == null) return;
     try {
       key.deleteValue(valueName);
     } catch (_) {

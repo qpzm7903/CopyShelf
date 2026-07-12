@@ -17,7 +17,7 @@
   修复：命中该输出时查 _remoteDefaultBranch，非空远端则返回可读错误。→ 排 v0.1.13/同步可视化附近。
 - [ ] **MEDIUM git 无超时/交互挂起**（git_service._git）：SSH 首连或凭据询问永久挂起。
   修复：environment 设 GIT_TERMINAL_PROMPT=0 / GIT_SSH_COMMAND BatchMode；Process.start + timeout + kill。
-- [ ] **MEDIUM 注册表只读权限**（autostart read 用 allAccess 且 openPath 在 try 外）：
+- [x] **MEDIUM 注册表只读权限/全新 profile**（autostart read 用 allAccess 且 openPath 在 try 外）：
   受限环境 settings 页整体加载失败。修复：read 用 readOnly 打开且纳入 try。
 - [ ] **MEDIUM 热键先持久化后注册**（settings_page._changeHotkey）：注册失败时坏组合已写盘、
   旧热键已注销，跨重启持续失效。修复：注册成功才持久化，失败回滚重注册旧组合。
