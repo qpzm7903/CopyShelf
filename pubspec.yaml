@@ -1,7 +1,7 @@
 name: copyshelf
 description: Windows 片段启动器 — 快速搜索并粘贴你预先配置的文本片段
 publish_to: 'none'
-version: 0.1.14
+version: 0.1.15
 
 environment:
   sdk: '>=3.10.0 <4.0.0'
@@ -19,6 +19,7 @@ dependencies:
   lpinyin: ^2.0.3
   tray_manager: ^0.5.3
   win32_registry: ^2.1.0
+  json5: ^0.8.2
 
 dev_dependencies:
   flutter_test:

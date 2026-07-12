@@ -1,5 +1,3 @@
-import '../../utils/template.dart';
-
 /// 一条导入候选（来源解析出的、待用户勾选入库的条目）
 class ImportCandidate {
   final String name;
@@ -8,10 +6,16 @@ class ImportCandidate {
   /// 该内容在来源中出现的次数（用于排序，越常用越靠前）
   final int frequency;
 
+  /// content 是否已是最终模板形态（占位符/转义都处理好了）。
+  /// true 时入库不再做字面大括号转义——用于 VS Code 等已转换 tabstop 的来源，
+  /// 否则会把有意生成的 {占位符} 二次转义成字面量。
+  final bool preEscaped;
+
   const ImportCandidate({
     required this.name,
     required this.content,
     this.frequency = 1,
+    this.preEscaped = false,
   });
 }
 
@@ -53,8 +57,12 @@ List<ImportCandidate> dedupeCandidates(
   return result;
 }
 
-/// 候选最终入库的内容：字面大括号转义，使导入的代码/命令不会被当模板解析。
-String candidateToSnippetContent(ImportCandidate c) =>
-    hasPlaceholders(c.content) || c.content.contains('{')
-        ? escapeLiteralBraces(c.content)
-        : c.content;
+/// 候选最终入库的内容：
+/// - preEscaped 候选（如 VS Code 已转换 tabstop）原样入库，不再转义；
+/// - 其余含大括号的原始内容做字面转义，使导入的代码/命令不会被当模板解析。
+String candidateToSnippetContent(ImportCandidate c) {
+  if (c.preEscaped) return c.content;
+  return c.content.contains('{') || c.content.contains('}')
+      ? escapeLiteralBraces(c.content)
+      : c.content;
+}

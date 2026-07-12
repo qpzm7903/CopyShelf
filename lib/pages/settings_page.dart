@@ -9,7 +9,9 @@ import '../services/autostart_service.dart';
 import '../services/hotkey_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/constants.dart';
+import '../services/importers/importer.dart';
 import '../services/importers/powershell_history_importer.dart';
+import '../services/importers/vscode_snippets_importer.dart';
 import '../utils/hotkey.dart';
 import '../widgets/hotkey_recorder.dart';
 import 'import_page.dart';
@@ -203,12 +205,76 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  void _importPowerShellHistory() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) =>
-            ImportPage(importer: PowerShellHistoryImporter()),
+  /// 选择导入来源。VS Code 需要用户提供 snippets 文件路径。
+  Future<void> _chooseImportSource() async {
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (Platform.isWindows)
+              ListTile(
+                key: const Key('import-source-powershell'),
+                leading: const Icon(Icons.terminal, size: 20),
+                title: const Text('PowerShell 历史'),
+                subtitle: const Text('从 PSReadLine 历史导入常用命令'),
+                onTap: () => Navigator.pop(ctx, 'powershell'),
+              ),
+            ListTile(
+              key: const Key('import-source-vscode'),
+              leading: const Icon(Icons.code, size: 20),
+              title: const Text('VS Code 片段'),
+              subtitle: const Text('从 snippets JSON 文件导入'),
+              onTap: () => Navigator.pop(ctx, 'vscode'),
+            ),
+          ],
+        ),
       ),
+    );
+    if (source == null || !mounted) return;
+    if (source == 'powershell') {
+      _pushImport(PowerShellHistoryImporter());
+    } else if (source == 'vscode') {
+      await _importVsCode();
+    }
+  }
+
+  Future<void> _importVsCode() async {
+    final controller = TextEditingController();
+    final path = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('VS Code snippets 文件'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: r'如 C:\Users\你\AppData\Roaming\Code\User\snippets\x.code-snippets',
+            isDense: true,
+          ),
+          style: const TextStyle(fontSize: 12.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
+            child: const Text('打开'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (path == null || path.isEmpty || !mounted) return;
+    _pushImport(VsCodeSnippetsImporter(filePath: path));
+  }
+
+  void _pushImport(Importer importer) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => ImportPage(importer: importer)),
     );
   }
 
@@ -256,13 +322,12 @@ class _SettingsPageState extends State<SettingsPage> {
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (Platform.isWindows)
-                  TextButton.icon(
-                    key: const Key('import-powershell-button'),
-                    onPressed: _importPowerShellHistory,
-                    icon: const Icon(Icons.download_outlined, size: 16),
-                    label: const Text('导入'),
-                  ),
+                TextButton.icon(
+                  key: const Key('import-button'),
+                  onPressed: _chooseImportSource,
+                  icon: const Icon(Icons.download_outlined, size: 16),
+                  label: const Text('导入'),
+                ),
                 TextButton.icon(
                   onPressed: () => _openEditor(),
                   icon: const Icon(Icons.add, size: 16),
