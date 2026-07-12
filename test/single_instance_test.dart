@@ -100,5 +100,32 @@ void main() {
       expect(acquired, isTrue);
       await second.dispose();
     });
+
+    test('CopyShelf 实例回 ack → notifyExisting 返回 true（bug-M1）', () async {
+      await first.tryAcquire(port: 0, onWake: () async {});
+
+      final delivered =
+          await SingleInstanceService.notifyExisting(port: first.port!);
+
+      expect(delivered, isTrue);
+    });
+
+    test('陌生程序占端口但不回 ack → notifyExisting 返回 false（bug-M1）', () async {
+      // Arrange — 模拟一个碰巧占用端口、只 accept 不回 ack 的陌生服务
+      final stranger =
+          await ServerSocket.bind(InternetAddress.loopbackIPv4, 0);
+      stranger.listen((client) {
+        // 读取但从不回 copyshelf-ack
+        client.listen((_) {}, onError: (_) {});
+      });
+
+      // Act
+      final delivered =
+          await SingleInstanceService.notifyExisting(port: stranger.port);
+
+      // Assert — 收不到 ack，判定对端不是 CopyShelf
+      expect(delivered, isFalse);
+      await stranger.close();
+    });
   });
 }

@@ -14,7 +14,11 @@ class SingleInstanceService {
   /// 唤醒指令；带应用前缀避免其他程序端口冲突时误触发
   static const String wakeCommand = 'copyshelf-wake';
 
+  /// 首实例对唤醒指令的应答；用于确认对端确实是 CopyShelf（而非碰巧占端口的程序）
+  static const String ackResponse = 'copyshelf-ack';
+
   static const Duration _connectTimeout = Duration(seconds: 1);
+  static const Duration _ackTimeout = Duration(seconds: 1);
 
   ServerSocket? _server;
 
@@ -43,6 +47,9 @@ class SingleInstanceService {
           .listen(
         (line) {
           if (line.trim() == wakeCommand) {
+            // 先回 ack 确认身份，再执行唤醒
+            client.write('$ackResponse\n');
+            client.flush().then((_) => client.close()).catchError((_) {});
             onWake();
           }
         },
@@ -55,22 +62,36 @@ class SingleInstanceService {
 
   /// 通知已在运行的实例唤醒（次实例调用后应自行退出）。
   ///
-  /// 返回 true 表示指令送达；连接失败（无实例监听）返回 false。
+  /// 只有收到 [ackResponse] 应答才返回 true——确认对端确实是 CopyShelf。
+  /// 连接失败、超时、或对端是碰巧占端口的陌生程序（不回 ack）均返回 false，
+  /// 让 main 据此降级为无锁正常启动，而不是静默退出。
   static Future<bool> notifyExisting({int port = defaultPort}) async {
+    Socket? socket;
     try {
-      final socket = await Socket.connect(
+      socket = await Socket.connect(
         InternetAddress.loopbackIPv4,
         port,
         timeout: _connectTimeout,
       );
       socket.write('$wakeCommand\n');
       await socket.flush();
-      await socket.close();
-      return true;
+
+      final response = await socket
+          .cast<List<int>>()
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .firstWhere((line) => line.trim() == ackResponse,
+              orElse: () => '')
+          .timeout(_ackTimeout, onTimeout: () => '');
+      return response.trim() == ackResponse;
     } on SocketException {
       return false;
     } on TimeoutException {
       return false;
+    } finally {
+      try {
+        await socket?.close();
+      } catch (_) {}
     }
   }
 

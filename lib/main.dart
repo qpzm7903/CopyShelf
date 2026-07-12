@@ -27,8 +27,12 @@ void main() async {
     onWake: () async => wakeHandler?.call(),
   );
   if (!lockAcquired) {
-    await SingleInstanceService.notifyExisting();
-    exit(0);
+    // 端口被占用：仅当对端确认是 CopyShelf（回 ack）才退出并唤醒它；
+    // 否则是陌生程序碰巧占了端口，降级为无锁正常启动，避免应用永远打不开。
+    final wokeExisting = await SingleInstanceService.notifyExisting();
+    if (wokeExisting) {
+      exit(0);
+    }
   }
 
   // 初始化窗口管理器

@@ -10,7 +10,7 @@
 
 ## 待修复（排入后续版本）
 
-- [ ] **HIGH 单实例锁误判**（main.dart）：端口 48632 被无关程序占用时静默 exit(0)，应用永不启动。
+- [x] **HIGH 单实例锁误判**（main.dart）：端口 48632 被无关程序占用时静默 exit(0)，应用永不启动。
   修复：wake 协议加 ack 握手，notifyExisting 只在收到 ack 才 true；main 收不到 ack 时降级为无锁启动。→ 排 v0.1.12 或独立补丁版。
 - [x] **MEDIUM git 分支不一致静默失效**（git_service.pull）：本地 master + 远端 main 时
   pull 命中 "couldn't find remote ref" 被当成功，各推各分支永不互通。
