@@ -9,8 +9,10 @@ import '../services/autostart_service.dart';
 import '../services/hotkey_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/constants.dart';
+import '../services/importers/powershell_history_importer.dart';
 import '../utils/hotkey.dart';
 import '../widgets/hotkey_recorder.dart';
+import 'import_page.dart';
 import 'snippet_editor_page.dart';
 
 /// 设置页面
@@ -201,6 +203,15 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  void _importPowerShellHistory() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            ImportPage(importer: PowerShellHistoryImporter()),
+      ),
+    );
+  }
+
   Future<void> _confirmDelete(Snippet snippet) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -242,10 +253,22 @@ class _SettingsPageState extends State<SettingsPage> {
         children: [
           _buildSectionHeader(
             '片段库',
-            trailing: TextButton.icon(
-              onPressed: () => _openEditor(),
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('新建片段'),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (Platform.isWindows)
+                  TextButton.icon(
+                    key: const Key('import-powershell-button'),
+                    onPressed: _importPowerShellHistory,
+                    icon: const Icon(Icons.download_outlined, size: 16),
+                    label: const Text('导入'),
+                  ),
+                TextButton.icon(
+                  onPressed: () => _openEditor(),
+                  icon: const Icon(Icons.add, size: 16),
+                  label: const Text('新建片段'),
+                ),
+              ],
             ),
           ),
           _buildSnippetLibrary(),

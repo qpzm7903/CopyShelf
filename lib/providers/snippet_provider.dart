@@ -372,6 +372,35 @@ class SnippetProvider extends ChangeNotifier {
     await _persistAndSync('delete snippet "${snippet.name}"');
   }
 
+  // ========== 批量导入 ==========
+
+  /// 库中已有片段的 content 集合（供导入去重）
+  Set<String> get existingContents =>
+      {for (final s in _snippets) s.content};
+
+  /// 批量导入片段（已由 UI 完成勾选），一次性持久化 + 同步。
+  /// 返回实际入库数量。
+  Future<int> importSnippets(List<Snippet> incoming) async {
+    if (incoming.isEmpty) return 0;
+    _snippets = [..._snippets, ...incoming];
+    _searchIndex = {
+      ..._searchIndex,
+      for (final s in incoming) s.id: buildSearchIndex(s),
+    };
+    _applyFilter();
+    notifyListeners();
+    await _persistAndSync('import ${incoming.length} snippet(s)');
+    return incoming.length;
+  }
+
+  /// 用给定 id 生成器创建一条片段（不入库，供导入页构建 incoming 列表）
+  Snippet buildSnippet({
+    required String name,
+    required String content,
+    List<String>? tags,
+  }) =>
+      Snippet(id: _uuid.v4(), name: name, content: content, tags: tags);
+
   // ========== 片段历史回滚 ==========
 
   /// 某条片段的历史版本（从 snippets.json 的提交历史中抽取该 id 存在过的版本）。
