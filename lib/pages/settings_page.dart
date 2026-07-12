@@ -10,6 +10,7 @@ import '../services/autostart_service.dart';
 import '../services/hotkey_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/constants.dart';
+import '../services/importers/espanso_importer.dart';
 import '../services/importers/importer.dart';
 import '../services/importers/powershell_history_importer.dart';
 import '../services/importers/vscode_snippets_importer.dart';
@@ -230,6 +231,13 @@ class _SettingsPageState extends State<SettingsPage> {
               subtitle: const Text('从 snippets JSON 文件导入'),
               onTap: () => Navigator.pop(ctx, 'vscode'),
             ),
+            ListTile(
+              key: const Key('import-source-espanso'),
+              leading: const Icon(Icons.keyboard, size: 20),
+              title: const Text('Espanso'),
+              subtitle: const Text('从 Espanso match YAML 文件导入'),
+              onTap: () => Navigator.pop(ctx, 'espanso'),
+            ),
           ],
         ),
       ),
@@ -238,23 +246,27 @@ class _SettingsPageState extends State<SettingsPage> {
     if (source == 'powershell') {
       _pushImport(PowerShellHistoryImporter());
     } else if (source == 'vscode') {
-      await _importVsCode();
+      final path = await _askFilePath('VS Code snippets 文件',
+          r'如 C:\Users\你\AppData\Roaming\Code\User\snippets\x.code-snippets');
+      if (path != null) _pushImport(VsCodeSnippetsImporter(filePath: path));
+    } else if (source == 'espanso') {
+      final path = await _askFilePath('Espanso match 文件',
+          r'如 C:\Users\你\AppData\Roaming\espanso\match\base.yml');
+      if (path != null) _pushImport(EspansoImporter(filePath: path));
     }
   }
 
-  Future<void> _importVsCode() async {
+  /// 询问文件路径的通用对话框；取消或空返回 null。
+  Future<String?> _askFilePath(String title, String hint) async {
     final controller = TextEditingController();
     final path = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('VS Code snippets 文件'),
+        title: Text(title),
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: r'如 C:\Users\你\AppData\Roaming\Code\User\snippets\x.code-snippets',
-            isDense: true,
-          ),
+          decoration: InputDecoration(hintText: hint, isDense: true),
           style: const TextStyle(fontSize: 12.5),
         ),
         actions: [
@@ -270,8 +282,8 @@ class _SettingsPageState extends State<SettingsPage> {
       ),
     );
     controller.dispose();
-    if (path == null || path.isEmpty || !mounted) return;
-    _pushImport(VsCodeSnippetsImporter(filePath: path));
+    if (path == null || path.isEmpty) return null;
+    return path;
   }
 
   void _pushImport(Importer importer) {

@@ -1,0 +1,29 @@
+{
+  "version": "0.1.20",
+  "description": "Windows snippet launcher — search and paste your configured text snippets.",
+  "homepage": "https://github.com/qpzm7903/CopyShelf",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/qpzm7903/CopyShelf/releases/download/v0.1.20/CopyShelf-0.1.20-windows-x86_64.zip",
+      "hash": ""
+    }
+  },
+  "bin": "copyshelf.exe",
+  "shortcuts": [
+    [
+      "copyshelf.exe",
+      "CopyShelf"
+    ]
+  ],
+  "checkver": {
+    "github": "https://github.com/qpzm7903/CopyShelf"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/qpzm7903/CopyShelf/releases/download/v$version/CopyShelf-$version-windows-x86_64.zip"
+      }
+    }
+  }
+}
