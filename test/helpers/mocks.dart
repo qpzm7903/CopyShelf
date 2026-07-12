@@ -86,4 +86,26 @@ class MockGitService extends GitService {
 
   @override
   Future<String?> pull(String dataDir) async => null;
+
+  /// 可注入的历史（commit hash → snippets.json 内容），按插入顺序倒序返回
+  final Map<String, String> commitContents = {};
+
+  @override
+  Future<List<GitCommitInfo>> fileHistory(String dataDir,
+      {int limit = 30}) async {
+    final epoch = DateTime(2026).millisecondsSinceEpoch ~/ 1000;
+    return commitContents.keys
+        .toList()
+        .reversed
+        .map((h) => GitCommitInfo(
+              hash: h,
+              committedAt: DateTime.fromMillisecondsSinceEpoch(epoch * 1000),
+              message: 'commit $h',
+            ))
+        .toList();
+  }
+
+  @override
+  Future<String?> snippetsAtCommit(String dataDir, String hash) async =>
+      commitContents[hash];
 }

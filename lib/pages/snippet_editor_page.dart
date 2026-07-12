@@ -91,6 +91,28 @@ class _SnippetEditorPageState extends State<SnippetEditorPage> {
     Navigator.of(context).pop();
   }
 
+  /// 打开历史版本对话框；选中一条把内容填回编辑器（不立即保存，用户可再改）
+  Future<void> _openHistory() async {
+    final provider = context.read<SnippetProvider>();
+    final id = widget.snippet!.id;
+    final selected = await showDialog<SnippetVersion>(
+      context: context,
+      builder: (ctx) => _HistoryDialog(
+        loader: () => provider.snippetHistory(id),
+      ),
+    );
+    if (selected == null || !mounted) return;
+    setState(() {
+      _nameController.text = selected.snippet.name;
+      _contentController.text = selected.snippet.content;
+      _descController.text = selected.snippet.description;
+      _tags = List.from(selected.snippet.tags);
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('已载入历史版本，点「保存」确认恢复')),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -101,6 +123,13 @@ class _SnippetEditorPageState extends State<SnippetEditorPage> {
         ),
         title: Text(_isEditing ? '编辑片段' : '添加片段'),
         actions: [
+          if (_isEditing)
+            IconButton(
+              key: const Key('snippet-history-button'),
+              icon: const Icon(Icons.history, size: 20),
+              tooltip: '历史版本',
+              onPressed: _openHistory,
+            ),
           Padding(
             padding: const EdgeInsets.only(right: 12),
             child: ElevatedButton(
@@ -198,6 +227,68 @@ class _SnippetEditorPageState extends State<SnippetEditorPage> {
             style: const TextStyle(fontSize: 12.5),
             onSubmitted: (_) => _addTag(),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 片段历史版本列表对话框：异步加载 git 历史，选中一条返回给编辑器
+class _HistoryDialog extends StatelessWidget {
+  final Future<List<SnippetVersion>> Function() loader;
+
+  const _HistoryDialog({required this.loader});
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('snippet-history-dialog'),
+      title: const Text('历史版本'),
+      content: SizedBox(
+        width: 420,
+        height: 360,
+        child: FutureBuilder<List<SnippetVersion>>(
+          future: loader(),
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final versions = snap.data ?? const [];
+            if (versions.isEmpty) {
+              return const Center(
+                child: Text('暂无历史版本（需已配置 Git 且有多次提交）',
+                    style: TextStyle(fontSize: 13, color: AppTheme.inkFaint)),
+              );
+            }
+            return ListView.separated(
+              itemCount: versions.length,
+              separatorBuilder: (_, __) => const Divider(height: 1),
+              itemBuilder: (context, i) {
+                final v = versions[i];
+                final preview = v.snippet.content.replaceAll('\n', ' ⏎ ');
+                return ListTile(
+                  key: Key('history-item-$i'),
+                  dense: true,
+                  title: Text(v.snippet.name,
+                      maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text(preview,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.mono(fontSize: 11)),
+                  trailing: Text(v.commit.hash,
+                      style: const TextStyle(
+                          fontSize: 11, color: AppTheme.inkFaint)),
+                  onTap: () => Navigator.pop(context, v),
+                );
+              },
+            );
+          },
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('关闭'),
         ),
       ],
     );

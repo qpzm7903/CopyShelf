@@ -4,6 +4,19 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
 
+/// snippets.json 的一次提交记录
+class GitCommitInfo {
+  final String hash;
+  final DateTime committedAt;
+  final String message;
+
+  const GitCommitInfo({
+    required this.hash,
+    required this.committedAt,
+    required this.message,
+  });
+}
+
 /// Git 同步服务
 ///
 /// 管理数据目录内的 Git 仓库操作：
@@ -169,9 +182,13 @@ class GitService {
       final stderr = result.stderr as String? ?? '';
       final stdout = result.stdout as String? ?? '';
       final output = '$stdout\n$stderr';
-      // 如果只是没有远程分支（远端还是空仓库），不算错误
+      // 没有对应远程分支：区分「远端空仓库」与「本地分支名与远端不一致」。
+      // 后者若也当成功，会导致两台设备各推各的分支、永不互通（bug-M1）。
       if (output.contains("couldn't find remote ref")) {
-        return null;
+        final remoteBranch = await _remoteDefaultBranch(dataDir);
+        if (remoteBranch == null) return null; // 远端确实为空
+        return '本地分支「$branch」在远端不存在（远端默认分支是「$remoteBranch」）。'
+            '两端分支名不一致会导致同步失效，请在设置页重新配置远端地址以对齐分支。';
       }
       if (output.contains('conflict') || output.contains('CONFLICT')) {
         // 中止 rebase，让本地保持可用状态（不阻塞本地编辑）
@@ -214,6 +231,47 @@ class GitService {
     } catch (e) {
       return 'Git 操作异常：$e';
     }
+  }
+
+  /// snippets.json 的一次提交记录（供历史回滚 UI）
+  ///
+  /// 每条含短哈希、提交信息、提交时间。按时间倒序（最新在前）。
+  Future<List<GitCommitInfo>> fileHistory(String dataDir,
+      {int limit = 30}) async {
+    final result = await _git(dataDir, [
+      'log',
+      '-n',
+      '$limit',
+      '--pretty=format:%h%x1f%ct%x1f%s',
+      '--',
+      AppConstants.snippetsFileName,
+    ]);
+    if (result.exitCode != 0) return const [];
+    final lines = (result.stdout as String? ?? '')
+        .split('\n')
+        .where((l) => l.trim().isNotEmpty);
+    final history = <GitCommitInfo>[];
+    for (final line in lines) {
+      final parts = line.split('\x1f');
+      if (parts.length != 3) continue;
+      final epoch = int.tryParse(parts[1]);
+      if (epoch == null) continue;
+      history.add(GitCommitInfo(
+        hash: parts[0],
+        committedAt:
+            DateTime.fromMillisecondsSinceEpoch(epoch * 1000),
+        message: parts[2],
+      ));
+    }
+    return history;
+  }
+
+  /// 读取某次提交中 snippets.json 的完整内容；失败返回 null。
+  Future<String?> snippetsAtCommit(String dataDir, String hash) async {
+    final result = await _git(
+        dataDir, ['show', '$hash:${AppConstants.snippetsFileName}']);
+    if (result.exitCode != 0) return null;
+    return result.stdout as String? ?? '';
   }
 
   /// 启动时完整同步（pull 后推本地变更）

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/snippet.dart';
@@ -9,6 +11,13 @@ import '../services/paste_service.dart';
 import '../services/target_window_service.dart';
 import '../utils/search_index.dart';
 import '../utils/terminal_paste_guard.dart';
+
+/// 片段的一个历史版本（提交信息 + 该提交中的片段快照）
+class SnippetVersion {
+  final GitCommitInfo commit;
+  final Snippet snippet;
+  const SnippetVersion({required this.commit, required this.snippet});
+}
 
 /// 片段状态管理
 ///
@@ -361,6 +370,62 @@ class SnippetProvider extends ChangeNotifier {
     notifyListeners();
 
     await _persistAndSync('delete snippet "${snippet.name}"');
+  }
+
+  // ========== 片段历史回滚 ==========
+
+  /// 某条片段的历史版本（从 snippets.json 的提交历史中抽取该 id 存在过的版本）。
+  /// 返回 (提交信息, 该提交中的该片段) 列表，最新在前；已删除或不存在的版本跳过。
+  Future<List<SnippetVersion>> snippetHistory(String id) async {
+    final dataDir = await _storage.getDataDirPath();
+    final commits = await _git.fileHistory(dataDir);
+    final versions = <SnippetVersion>[];
+    final seenContent = <String>{};
+    for (final c in commits) {
+      final json = await _git.snippetsAtCommit(dataDir, c.hash);
+      if (json == null) continue;
+      final snippet = _extractSnippet(json, id);
+      if (snippet == null) continue;
+      // 去掉连续相同内容的版本，只保留有变化的历史点
+      final key = '${snippet.name} ${snippet.content}';
+      if (!seenContent.add(key)) continue;
+      versions.add(SnippetVersion(commit: c, snippet: snippet));
+    }
+    return versions;
+  }
+
+  Snippet? _extractSnippet(String snippetsJson, String id) {
+    try {
+      final list = jsonDecode(snippetsJson) as List<dynamic>;
+      for (final e in list) {
+        final map = e as Map<String, dynamic>;
+        if (map['id'] == id) return Snippet.fromJson(map);
+      }
+    } catch (_) {
+      // 该提交的文件损坏：跳过这个历史点
+    }
+    return null;
+  }
+
+  /// 把某条片段恢复到历史版本（只改这一条，其余不动），随后持久化 + 同步。
+  Future<void> restoreSnippet(String id, Snippet historical) async {
+    final index = _snippets.indexWhere((s) => s.id == id);
+    if (index == -1) return;
+    final restored = _snippets[index].copyWith(
+      name: historical.name,
+      content: historical.content,
+      description: historical.description,
+      tags: List.from(historical.tags),
+    );
+    _snippets = [
+      ..._snippets.sublist(0, index),
+      restored,
+      ..._snippets.sublist(index + 1),
+    ];
+    _searchIndex = {..._searchIndex, restored.id: buildSearchIndex(restored)};
+    _applyFilter();
+    notifyListeners();
+    await _persistAndSync('restore snippet "${restored.name}"');
   }
 
   // ========== 搜索框显隐 ==========
