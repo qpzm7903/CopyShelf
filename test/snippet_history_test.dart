@@ -82,6 +82,31 @@ void main() {
       expect(git.commitMessages.single, contains('restore'));
     });
 
+    test('仅改 tags 的版本作为独立历史点保留（bug-M2 去重键）', () async {
+      git.commitContents['c1'] =
+          '[{"id":"a","name":"cmd","content":"x","tags":["v1"]}]';
+      git.commitContents['c2'] =
+          '[{"id":"a","name":"cmd","content":"x","tags":["v2"]}]';
+      final provider = build();
+
+      final history = await provider.snippetHistory('a');
+
+      // 名称与内容相同、仅 tags 不同 → 旧空格拼接键会误判重复；现应保留两个
+      expect(history, hasLength(2));
+    });
+
+    test('name/content 拼接歧义不再撞键（bug-M2）', () async {
+      git.commitContents['c1'] =
+          '[{"id":"a","name":"foo","content":"bar baz"}]';
+      git.commitContents['c2'] =
+          '[{"id":"a","name":"foo bar","content":"baz"}]';
+      final provider = build();
+
+      final history = await provider.snippetHistory('a');
+
+      expect(history, hasLength(2));
+    });
+
     test('恢复不存在的片段 id 时无操作', () async {
       await storage.saveSnippets(
           [Snippet(id: 'a', name: 'cmd', content: 'x')]);

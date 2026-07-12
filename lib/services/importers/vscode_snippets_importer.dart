@@ -93,6 +93,25 @@ class VsCodeSnippetsImporter extends Importer {
     var i = 0;
     while (i < body.length) {
       final ch = body[i];
+      // 反斜杠转义：\$ \{ \} \\ 表示字面量，不参与 tabstop / 占位符解析
+      if (ch == r'\' && i + 1 < body.length) {
+        final next = body[i + 1];
+        if (next == r'$' || next == r'\') {
+          buffer.write(next);
+          i += 2;
+          continue;
+        }
+        if (next == '{') {
+          buffer.write('{{');
+          i += 2;
+          continue;
+        }
+        if (next == '}') {
+          buffer.write('}}');
+          i += 2;
+          continue;
+        }
+      }
       if (ch == r'$') {
         final consumed = _tryParseTabstop(body, i, buffer);
         if (consumed > 0) {
@@ -121,6 +140,12 @@ class VsCodeSnippetsImporter extends Importer {
       final n = int.parse(simple.group(1)!);
       if (n != 0) out.write('{arg$n}');
       return simple.group(0)!.length;
+    }
+    // $VAR 非花括号命名变量（如 $CURRENT_YEAR）：无默认值可用，丢弃占位
+    final namedVar =
+        RegExp(r'\$([A-Za-z_][A-Za-z0-9_]*)').matchAsPrefix(body, start);
+    if (namedVar != null) {
+      return namedVar.group(0)!.length;
     }
     // ${...} 复杂形式：手动找配对的 }
     if (start + 1 < body.length && body[start + 1] == '{') {
@@ -156,12 +181,15 @@ class VsCodeSnippetsImporter extends Importer {
       return n == '0' ? '' : '{arg$n:$first}';
     }
     // N:default
-    final withDefault = RegExp(r'^(\d+):(.*)$').firstMatch(inner);
+    final withDefault = RegExp(r'^(\d+):(.*)$', dotAll: true).firstMatch(inner);
     if (withDefault != null) {
       final n = withDefault.group(1)!;
       final def = withDefault.group(2)!;
-      if (n == '0') return def; // 最终光标位保留其默认文本
-      return def.isEmpty ? '{arg$n}' : '{$def}';
+      if (n == '0') return convertTabstops(def); // 最终光标位保留其默认文本
+      if (def.isEmpty) return '{arg$n}';
+      // 嵌套 tabstop（如 ${1:${2:foo}}）：递归转换默认值，得到干净占位符
+      if (def.contains(r'$')) return convertTabstops(def);
+      return '{$def}';
     }
     // 纯数字 N
     final plain = RegExp(r'^(\d+)$').firstMatch(inner);

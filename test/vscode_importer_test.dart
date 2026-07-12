@@ -45,6 +45,23 @@ void main() {
               r'wrap ${TM_SELECTED_TEXT:x}'),
           'wrap x');
     });
+
+    test(r'反斜杠转义 \$5 \{ \} \\ 视为字面（bug-M2）', () {
+      expect(VsCodeSnippetsImporter.convertTabstops(r'echo \$5'), 'echo \$5');
+      expect(VsCodeSnippetsImporter.convertTabstops(r'\{'), '{{');
+      expect(VsCodeSnippetsImporter.convertTabstops(r'\}'), '}}');
+      expect(VsCodeSnippetsImporter.convertTabstops(r'a\\b'), r'a\b');
+    });
+
+    test(r'非花括号命名变量 $CURRENT_YEAR 丢弃（bug-M2）', () {
+      expect(VsCodeSnippetsImporter.convertTabstops(r'Copyright $CURRENT_YEAR'),
+          'Copyright ');
+      expect(VsCodeSnippetsImporter.convertTabstops(r'$TM_FILENAME'), '');
+    });
+
+    test(r'嵌套默认值 ${1:${2:foo}} 递归转换（bug-M2）', () {
+      expect(VsCodeSnippetsImporter.convertTabstops(r'${1:${2:foo}}'), '{foo}');
+    });
   });
 
   group('VS Code snippets JSONC 解析', () {

@@ -13,9 +13,9 @@
 ## 待修复（后续版本）
 
 - [ ] **MEDIUM convertTabstops 未处理反斜杠转义**：`\$5` 被误转成占位符。
-- [ ] **MEDIUM convertTabstops 非花括号命名变量** `$CURRENT_YEAR` 原样残留（应丢弃）。
-- [ ] **MEDIUM convertTabstops 嵌套默认值** `${1:${2:foo}}` 生成乱码字面。
-- [ ] **MEDIUM snippetHistory 去重键**忽略 description/tags 且空格拼接有碰撞 → 用 jsonEncode。
+- [x] **MEDIUM convertTabstops 非花括号命名变量** `$CURRENT_YEAR` 原样残留（应丢弃）。
+- [x] **MEDIUM convertTabstops 嵌套默认值** `${1:${2:foo}}` 生成乱码字面。
+- [x] **MEDIUM snippetHistory 去重键**忽略 description/tags 且空格拼接有碰撞 → 用 jsonEncode。
 - [ ] **HIGH（部分）Clipboard.getData 无 try**：粘贴路径异常/挂起（与 M1 git 超时同类）。
 
 ## 说明

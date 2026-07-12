@@ -453,8 +453,13 @@ class SnippetProvider extends ChangeNotifier {
       if (json == null) continue;
       final snippet = _extractSnippet(json, id);
       if (snippet == null) continue;
-      // 去掉连续相同内容的版本，只保留有变化的历史点
-      final key = '${snippet.name} ${snippet.content}';
+      // 去重键覆盖 restoreSnippet 恢复的全部字段，jsonEncode 消除拼接歧义
+      final key = jsonEncode({
+        'name': snippet.name,
+        'content': snippet.content,
+        'description': snippet.description,
+        'tags': snippet.tags,
+      });
       if (!seenContent.add(key)) continue;
       versions.add(SnippetVersion(commit: c, snippet: snippet));
     }
