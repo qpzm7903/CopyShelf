@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'providers/snippet_provider.dart';
+import 'providers/theme_controller.dart';
 import 'services/storage_service.dart';
 import 'services/git_service.dart';
 import 'services/hotkey_service.dart';
@@ -122,27 +123,42 @@ void main() async {
     await tray.init();
   }
 
-  runApp(CopyShelfApp(snippetProvider: snippetProvider));
+  final themeController = ThemeController(storage);
+
+  runApp(CopyShelfApp(
+    snippetProvider: snippetProvider,
+    themeController: themeController,
+  ));
 }
 
 class CopyShelfApp extends StatelessWidget {
   final SnippetProvider snippetProvider;
+  final ThemeController themeController;
 
-  const CopyShelfApp({super.key, required this.snippetProvider});
+  const CopyShelfApp({
+    super.key,
+    required this.snippetProvider,
+    required this.themeController,
+  });
 
   @override
   Widget build(BuildContext context) {
     final defaultFontFamily = Platform.isWindows ? 'Microsoft YaHei UI' : null;
 
-    return ChangeNotifierProvider.value(
-      value: snippetProvider,
-      child: MaterialApp(
-        title: AppConstants.appName,
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light(fontFamily: defaultFontFamily),
-        darkTheme: AppTheme.dark(fontFamily: defaultFontFamily),
-        themeMode: ThemeMode.light,
-        home: const HomePage(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: snippetProvider),
+        ChangeNotifierProvider.value(value: themeController),
+      ],
+      child: Consumer<ThemeController>(
+        builder: (context, theme, _) => MaterialApp(
+          title: AppConstants.appName,
+          debugShowCheckedModeBanner: false,
+          theme: AppTheme.light(fontFamily: defaultFontFamily),
+          darkTheme: AppTheme.dark(fontFamily: defaultFontFamily),
+          themeMode: theme.mode,
+          home: const HomePage(),
+        ),
       ),
     );
   }

@@ -4,7 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:copyshelf/pages/settings_page.dart';
 import 'package:copyshelf/providers/snippet_provider.dart';
+import 'package:copyshelf/providers/theme_controller.dart';
 import 'package:copyshelf/services/paste_service.dart';
+import 'package:copyshelf/services/storage_service.dart';
 
 import 'helpers/mocks.dart';
 
@@ -18,9 +20,13 @@ void main() {
       git: MockGitService(),
       paste: (_) async => PasteOutcome.pasted,
     );
+    final themeController = ThemeController(await StorageService.instance);
     await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: provider,
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: provider),
+          ChangeNotifierProvider.value(value: themeController),
+        ],
         child: const MaterialApp(home: SettingsPage()),
       ),
     );

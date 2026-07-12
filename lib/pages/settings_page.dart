@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/snippet.dart';
 import '../providers/snippet_provider.dart';
+import '../providers/theme_controller.dart';
 import '../services/storage_service.dart';
 import '../services/git_service.dart';
 import '../services/autostart_service.dart';
@@ -357,23 +358,30 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
           ),
-          if (_autostart != null) ...[
-            const SizedBox(height: 28),
-            _buildSectionHeader('常规'),
-            Card(
-              child: SwitchListTile(
-                key: const Key('autostart-switch'),
-                title: const Text('开机自启', style: TextStyle(fontSize: 13.5)),
-                subtitle: const Text(
-                  '登录 Windows 后自动在后台启动 CopyShelf',
-                  style: TextStyle(fontSize: 11.5, color: AppTheme.inkFaint),
-                ),
-                value: _isAutostartEnabled,
-                onChanged: _toggleAutostart,
-                dense: true,
-              ),
+          const SizedBox(height: 28),
+          _buildSectionHeader('常规'),
+          Card(
+            child: Column(
+              children: [
+                if (_autostart != null)
+                  SwitchListTile(
+                    key: const Key('autostart-switch'),
+                    title:
+                        const Text('开机自启', style: TextStyle(fontSize: 13.5)),
+                    subtitle: const Text(
+                      '登录 Windows 后自动在后台启动 CopyShelf',
+                      style:
+                          TextStyle(fontSize: 11.5, color: AppTheme.inkFaint),
+                    ),
+                    value: _isAutostartEnabled,
+                    onChanged: _toggleAutostart,
+                    dense: true,
+                  ),
+                if (_autostart != null) const Divider(height: 1),
+                _buildThemeSelector(),
+              ],
             ),
-          ],
+          ),
           const SizedBox(height: 28),
           _buildSectionHeader('数据与同步'),
           Card(
@@ -426,6 +434,42 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 主题三态选择（跟随系统 / 亮 / 暗）
+  Widget _buildThemeSelector() {
+    return Consumer<ThemeController>(
+      builder: (context, controller, _) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+        child: Row(
+          children: [
+            const Expanded(
+              child: Text('主题', style: TextStyle(fontSize: 13.5)),
+            ),
+            SegmentedButton<ThemeMode>(
+              key: const Key('theme-selector'),
+              style: const ButtonStyle(
+                visualDensity: VisualDensity.compact,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              segments: const [
+                ButtonSegment(
+                    value: ThemeMode.system,
+                    label: Text('跟随', style: TextStyle(fontSize: 12))),
+                ButtonSegment(
+                    value: ThemeMode.light,
+                    label: Text('亮', style: TextStyle(fontSize: 12))),
+                ButtonSegment(
+                    value: ThemeMode.dark,
+                    label: Text('暗', style: TextStyle(fontSize: 12))),
+              ],
+              selected: {controller.mode},
+              onSelectionChanged: (s) => controller.setMode(s.first),
+            ),
+          ],
+        ),
       ),
     );
   }

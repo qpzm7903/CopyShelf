@@ -271,23 +271,24 @@ class _SearchOverlayState extends State<SearchOverlay> {
 
   Widget _buildSearchBar(SnippetProvider provider) {
     return Container(
+      key: const Key('search-bar-container'),
       padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
-      decoration: const BoxDecoration(
-        color: AppTheme.surface,
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceOf(context),
         border: Border(
-          bottom: BorderSide(color: AppTheme.hairline, width: 0.5),
+          bottom: BorderSide(color: AppTheme.hairlineOf(context), width: 0.5),
         ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.search, size: 20, color: AppTheme.inkFaint),
+          Icon(Icons.search, size: 20, color: AppTheme.inkFaintOf(context)),
           const SizedBox(width: 10),
           Expanded(
             child: TextField(
               controller: _searchController,
               focusNode: _inputFocusNode,
               autofocus: true,
-              style: const TextStyle(fontSize: 16, color: AppTheme.ink),
+              style: TextStyle(fontSize: 16, color: AppTheme.inkOf(context)),
               decoration: const InputDecoration(
                 hintText: '搜索名称、内容、标签，支持拼音',
                 hintStyle:
@@ -315,7 +316,8 @@ class _SearchOverlayState extends State<SearchOverlay> {
 
   Widget _buildSnippetList(SnippetProvider provider, List<Snippet> snippets) {
     return Container(
-      color: AppTheme.surface,
+      key: const Key('snippet-list-container'),
+      color: AppTheme.surfaceOf(context),
       child: ListView.builder(
         padding: const EdgeInsets.symmetric(vertical: 4),
         itemCount: snippets.length,

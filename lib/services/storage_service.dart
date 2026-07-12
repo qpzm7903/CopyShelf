@@ -65,6 +65,10 @@ class StorageService {
 
   bool get hasGitRemote => _p.containsKey(AppConstants.prefKeyGitRemote);
 
+  /// 通用字符串偏好读写（供 extension 复用，避免各处直接碰 _p）
+  String? rawString(String key) => _p.getString(key);
+  void setRawString(String key, String value) => _p.setString(key, value);
+
   /// 终端多行粘贴确认框的「不再提醒」
   bool get suppressTerminalPasteWarning =>
       _p.getBool(AppConstants.prefKeySuppressTerminalPasteWarning) ?? false;
