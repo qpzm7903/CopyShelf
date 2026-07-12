@@ -19,10 +19,14 @@ class SnippetStats {
   /// 最近使用时间戳（升序，最多保留 [_maxRecentUses] 条），frecency 的输入
   final List<DateTime> recentUses;
 
+  /// 是否置顶（本地状态，不同步；置顶项恒排最前）
+  final bool pinned;
+
   const SnippetStats({
     required this.frequency,
     required this.lastUsedAt,
     this.recentUses = const [],
+    this.pinned = false,
   });
 
   /// 从未使用过的片段的统计（频率 0、时间为 epoch，排序垫底）。
@@ -40,8 +44,17 @@ class SnippetStats {
       recentUses: uses.length > _maxRecentUses
           ? uses.sublist(uses.length - _maxRecentUses)
           : uses,
+      pinned: pinned,
     );
   }
+
+  /// 切换置顶状态，返回新实例。
+  SnippetStats withPinned(bool value) => SnippetStats(
+        frequency: frequency,
+        lastUsedAt: lastUsedAt,
+        recentUses: recentUses,
+        pinned: value,
+      );
 
   /// frecency 得分：每条最近使用记录按年龄指数衰减后求和。
   ///
@@ -62,6 +75,7 @@ class SnippetStats {
         'frequency': frequency,
         'lastUsedAt': lastUsedAt.toIso8601String(),
         'recentUses': recentUses.map((t) => t.toIso8601String()).toList(),
+        if (pinned) 'pinned': true,
       };
 
   factory SnippetStats.fromJson(Map<String, dynamic> json) {
@@ -85,6 +99,7 @@ class SnippetStats {
       frequency: frequency,
       lastUsedAt: lastUsedAt,
       recentUses: recentUses,
+      pinned: json['pinned'] as bool? ?? false,
     );
   }
 }

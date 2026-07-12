@@ -223,6 +223,10 @@ class SnippetProvider extends ChangeNotifier {
       for (final s in _filteredSnippets) s.id: statsFor(s.id).frecencyScore(now),
     };
     _filteredSnippets.sort((a, b) {
+      // 置顶项恒排最前
+      final pinA = statsFor(a.id).pinned;
+      final pinB = statsFor(b.id).pinned;
+      if (pinA != pinB) return pinA ? -1 : 1;
       // frecency 降序：近期使用权重高，随时间指数衰减
       final scoreCmp = scores[b.id]!.compareTo(scores[a.id]!);
       if (scoreCmp != 0) return scoreCmp;
@@ -371,6 +375,22 @@ class SnippetProvider extends ChangeNotifier {
 
     await _persistAndSync('delete snippet "${snippet.name}"');
   }
+
+  /// 切换片段置顶状态（本地统计，不同步 ADR-0001）。
+  Future<void> togglePin(String id) async {
+    final current = statsFor(id);
+    _stats = {..._stats, id: current.withPinned(!current.pinned)};
+    _applyFilter();
+    notifyListeners();
+    try {
+      await _storage.saveStats(_stats);
+    } catch (e) {
+      _error = '保存置顶状态失败: $e';
+      notifyListeners();
+    }
+  }
+
+  bool isPinned(String id) => statsFor(id).pinned;
 
   // ========== 批量导入 ==========
 

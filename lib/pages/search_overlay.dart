@@ -326,9 +326,11 @@ class _SearchOverlayState extends State<SearchOverlay> {
             frequency: provider.statsFor(snippet.id).frequency,
             shortcutNumber: index < 9 ? index + 1 : null,
             isSelected: index == _selectedIndex,
+            isPinned: provider.isPinned(snippet.id),
             // 收敛到 _pasteAt：占位符填表与终端多行护栏对鼠标点击同样生效
             onTap: () => _pasteAt(provider, index),
             onHover: () => setState(() => _selectedIndex = index),
+            onTogglePin: () => provider.togglePin(snippet.id),
           );
         },
       ),
@@ -433,16 +435,20 @@ class _SnippetRow extends StatelessWidget {
   /// Alt+N 直达序号（1..9）；列表第 10 项起为 null 不显示角标
   final int? shortcutNumber;
   final bool isSelected;
+  final bool isPinned;
   final VoidCallback onTap;
   final VoidCallback onHover;
+  final VoidCallback onTogglePin;
 
   const _SnippetRow({
     required this.snippet,
     required this.frequency,
     this.shortcutNumber,
     required this.isSelected,
+    required this.isPinned,
     required this.onTap,
     required this.onHover,
+    required this.onTogglePin,
   });
 
   @override
@@ -524,6 +530,24 @@ class _SnippetRow extends StatelessWidget {
                       ),
                     ),
                   ],
+                  const SizedBox(width: 4),
+                  InkWell(
+                    key: Key('pin-toggle-${snippet.id}'),
+                    onTap: onTogglePin,
+                    borderRadius: BorderRadius.circular(4),
+                    child: Padding(
+                      padding: const EdgeInsets.all(3),
+                      child: Icon(
+                        isPinned
+                            ? Icons.push_pin
+                            : Icons.push_pin_outlined,
+                        size: 13,
+                        color: isPinned
+                            ? AppTheme.accent
+                            : AppTheme.inkFaint,
+                      ),
+                    ),
+                  ),
                 ],
               ),
               const SizedBox(height: 2),
