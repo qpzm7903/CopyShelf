@@ -6,6 +6,7 @@ import '../providers/snippet_provider.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/hotkey.dart';
+import '../utils/search_query.dart';
 import '../utils/template.dart';
 import '../widgets/key_caps.dart';
 import '../widgets/sync_indicator.dart';
@@ -340,6 +341,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
             shortcutNumber: index < 9 ? index + 1 : null,
             isSelected: index == _selectedIndex,
             isPinned: provider.isPinned(snippet.id),
+            highlight: provider.searchText,
             // 收敛到 _pasteAt：占位符填表与终端多行护栏对鼠标点击同样生效
             onTap: () => _pasteAt(provider, index),
             onHover: () => setState(() => _selectedIndex = index),
@@ -449,6 +451,9 @@ class _SnippetRow extends StatelessWidget {
   final int? shortcutNumber;
   final bool isSelected;
   final bool isPinned;
+
+  /// 名称中要高亮的自由关键词（去掉 #tag）
+  final String highlight;
   final VoidCallback onTap;
   final VoidCallback onHover;
   final VoidCallback onTogglePin;
@@ -459,6 +464,7 @@ class _SnippetRow extends StatelessWidget {
     this.shortcutNumber,
     required this.isSelected,
     required this.isPinned,
+    required this.highlight,
     required this.onTap,
     required this.onHover,
     required this.onTogglePin,
@@ -516,15 +522,9 @@ class _SnippetRow extends StatelessWidget {
                     const SizedBox(width: 8),
                   ],
                   Expanded(
-                    child: Text(
-                      snippet.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        color: AppTheme.ink,
-                      ),
+                    child: _HighlightedName(
+                      name: snippet.name,
+                      query: highlight,
                     ),
                   ),
                   ...snippet.tags.take(2).map(
@@ -574,6 +574,53 @@ class _SnippetRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// 片段名称，命中的自由关键词字符高亮
+class _HighlightedName extends StatelessWidget {
+  final String name;
+  final String query;
+
+  const _HighlightedName({required this.name, required this.query});
+
+  @override
+  Widget build(BuildContext context) {
+    const base = TextStyle(
+      fontSize: 14,
+      fontWeight: FontWeight.w500,
+      color: AppTheme.ink,
+    );
+    final ranges = highlightRanges(name, query);
+    if (ranges.isEmpty) {
+      return Text(name,
+          maxLines: 1, overflow: TextOverflow.ellipsis, style: base);
+    }
+    final spans = <TextSpan>[];
+    var cursor = 0;
+    for (final (start, end) in ranges) {
+      if (start > cursor) {
+        spans.add(TextSpan(text: name.substring(cursor, start)));
+      }
+      spans.add(TextSpan(
+        text: name.substring(start, end),
+        style: const TextStyle(
+          color: AppTheme.accent,
+          fontWeight: FontWeight.w700,
+          backgroundColor: AppTheme.accentTint,
+        ),
+      ));
+      cursor = end;
+    }
+    if (cursor < name.length) {
+      spans.add(TextSpan(text: name.substring(cursor)));
+    }
+    return RichText(
+      key: const Key('highlighted-name'),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      text: TextSpan(style: base, children: spans),
     );
   }
 }

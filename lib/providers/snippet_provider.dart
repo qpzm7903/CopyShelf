@@ -10,6 +10,7 @@ import '../services/git_service.dart';
 import '../services/paste_service.dart';
 import '../services/target_window_service.dart';
 import '../utils/search_index.dart';
+import '../utils/search_query.dart';
 import '../utils/terminal_paste_guard.dart';
 
 /// 片段的一个历史版本（提交信息 + 该提交中的片段快照）
@@ -201,14 +202,20 @@ class SnippetProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 当前查询的自由关键词（去掉 #tag），供列表名称高亮命中字符
+  String get searchText => parseSearchQuery(_searchQuery).text;
+
   void _applyFilter() {
-    if (_searchQuery.isEmpty) {
+    final query = parseSearchQuery(_searchQuery);
+    if (query.isEmpty) {
       _filteredSnippets = List.from(_snippets);
     } else {
-      final lowerQuery = _searchQuery.toLowerCase();
       _filteredSnippets = _snippets.where((snippet) {
+        // #tag 约束按片段标签精确过滤
+        if (!matchesTags(snippet.tags, query.tags)) return false;
+        if (query.text.isEmpty) return true;
         final index = _searchIndex[snippet.id] ??= buildSearchIndex(snippet);
-        return index.contains(lowerQuery);
+        return index.contains(query.text);
       }).toList();
     }
     _sortSnippets();
