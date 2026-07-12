@@ -13,6 +13,17 @@ import 'helpers/mocks.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.getData') {
+        return <String, dynamic>{'text': ''};
+      }
+      return null;
+    });
+  });
+
+
   Future<({SnippetProvider provider, List<String> pasted})> pumpOverlay(
     WidgetTester tester, {
     required String content,

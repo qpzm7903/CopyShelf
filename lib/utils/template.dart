@@ -78,3 +78,86 @@ String renderTemplate(String content, Map<String, String> values) {
   }
   return buffer.toString();
 }
+
+// ========== v0.1.11：内置变量 + 默认值 ==========
+
+/// 自动求值、不进填表的内置变量名
+const Set<String> _builtinVariables = {
+  'date',
+  'time',
+  'datetime',
+  'clipboard',
+};
+
+bool isBuiltinVariable(String name) => _builtinVariables.contains(name);
+
+/// 拆分占位符 token 为 (名称, 默认值?)。默认值在第一个冒号之后，
+/// 冒号后为空或无冒号则默认值为 null。默认值本身可含冒号。
+(String, String?) splitPlaceholder(String raw) {
+  final idx = raw.indexOf(':');
+  if (idx == -1) return (raw, null);
+  return (raw.substring(0, idx), raw.substring(idx + 1));
+}
+
+/// 需要用户填表的占位符名（去重保序）：排除内置变量，去掉默认值部分。
+List<String> userInputPlaceholders(String content) {
+  final seen = <String>{};
+  final result = <String>[];
+  for (final raw in parsePlaceholders(content)) {
+    final (name, _) = splitPlaceholder(raw);
+    if (isBuiltinVariable(name)) continue;
+    if (seen.add(name)) result.add(name);
+  }
+  return result;
+}
+
+/// 提取某占位符的默认值（供填表预填）；无默认值返回空串。
+String defaultValueFor(String content, String name) {
+  for (final raw in parsePlaceholders(content)) {
+    final (n, def) = splitPlaceholder(raw);
+    if (n == name) return def ?? '';
+  }
+  return '';
+}
+
+String _pad2(int n) => n.toString().padLeft(2, '0');
+
+String _formatDate(DateTime t) =>
+    '${t.year}-${_pad2(t.month)}-${_pad2(t.day)}';
+
+String _formatTime(DateTime t) =>
+    '${_pad2(t.hour)}:${_pad2(t.minute)}:${_pad2(t.second)}';
+
+/// 高级渲染：内置变量按 [now]/[clipboard] 求值，自定义占位符用 [userValues]，
+/// 用户留空且占位符声明了默认值时回退到默认值；字面 `{{ }}` 反转义。
+String renderTemplateAdvanced(
+  String content, {
+  required Map<String, String> userValues,
+  required DateTime now,
+  required String clipboard,
+}) {
+  final buffer = StringBuffer();
+  for (final seg in _parse(content)) {
+    if (!seg.isPlaceholder) {
+      buffer.write(seg.text);
+      continue;
+    }
+    final (name, def) = splitPlaceholder(seg.text);
+    switch (name) {
+      case 'date':
+        buffer.write(_formatDate(now));
+      case 'time':
+        buffer.write(_formatTime(now));
+      case 'datetime':
+        buffer.write('${_formatDate(now)} ${_formatTime(now)}');
+      case 'clipboard':
+        buffer.write(clipboard);
+      default:
+        final value = userValues[name];
+        final resolved =
+            (value == null || value.isEmpty) ? (def ?? '') : value;
+        buffer.write(resolved);
+    }
+  }
+  return buffer.toString();
+}

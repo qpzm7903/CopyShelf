@@ -13,6 +13,17 @@ import 'helpers/mocks.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'Clipboard.getData') {
+        return <String, dynamic>{'text': ''};
+      }
+      return null;
+    });
+  });
+
+
   Future<({SnippetProvider provider, List<String> pasted, MockStorageService storage})>
       pumpOverlay(
     WidgetTester tester, {
@@ -118,6 +129,16 @@ void main() {
 
       expect(find.byKey(const Key('terminal-paste-confirm')), findsNothing);
       expect(ctx.pasted, hasLength(1));
+    });
+
+    testWidgets('鼠标点击列表行同样触发终端护栏（回归 bug-M1）', (tester) async {
+      final ctx = await pumpOverlay(tester);
+
+      await tester.tap(find.text('deploy-script'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('terminal-paste-confirm')), findsOneWidget);
+      expect(ctx.pasted, isEmpty);
     });
   });
 }

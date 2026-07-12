@@ -129,15 +129,26 @@ class _SearchOverlayState extends State<SearchOverlay> {
     if (index < 0 || index >= snippets.length) return;
     final snippet = snippets[index];
 
-    // 占位符模板：有占位符先填表；无占位符也渲染以反转义字面 {{ }}
+    // 占位符模板：只有自定义占位符需填表（内置变量 date/time/clipboard 自动求值）
     var values = <String, String>{};
-    final placeholders = parsePlaceholders(snippet.content);
-    if (placeholders.isNotEmpty) {
-      final filled = await _promptPlaceholders(snippet.name, placeholders);
+    final fields = userInputPlaceholders(snippet.content);
+    if (fields.isNotEmpty) {
+      final defaults = {
+        for (final name in fields)
+          name: defaultValueFor(snippet.content, name),
+      };
+      final filled = await _promptPlaceholders(snippet.name, fields, defaults);
       if (filled == null) return; // 用户取消
       values = filled;
     }
-    final content = renderTemplate(snippet.content, values);
+
+    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+    final content = renderTemplateAdvanced(
+      snippet.content,
+      userValues: values,
+      now: DateTime.now(),
+      clipboard: clipboardData?.text ?? '',
+    );
 
     // 终端多行护栏：以最终粘贴内容判定，多行片段粘进终端会被逐行执行
     if (provider.needsTerminalPasteConfirm(snippet.id,
@@ -150,14 +161,15 @@ class _SearchOverlayState extends State<SearchOverlay> {
     provider.hideSearch();
   }
 
-  /// 占位符填表对话框；返回 null 表示用户取消
-  Future<Map<String, String>?> _promptPlaceholders(
-      String snippetName, List<String> placeholders) {
+  /// 占位符填表对话框；返回 null 表示用户取消。[defaults] 预填每项默认值。
+  Future<Map<String, String>?> _promptPlaceholders(String snippetName,
+      List<String> placeholders, Map<String, String> defaults) {
     return showDialog<Map<String, String>>(
       context: context,
       builder: (ctx) => _PlaceholderForm(
         snippetName: snippetName,
         placeholders: placeholders,
+        defaults: defaults,
       ),
     );
   }
@@ -313,10 +325,8 @@ class _SearchOverlayState extends State<SearchOverlay> {
             frequency: provider.statsFor(snippet.id).frequency,
             shortcutNumber: index < 9 ? index + 1 : null,
             isSelected: index == _selectedIndex,
-            onTap: () {
-              provider.useSnippet(snippet.id);
-              provider.hideSearch();
-            },
+            // 收敛到 _pasteAt：占位符填表与终端多行护栏对鼠标点击同样生效
+            onTap: () => _pasteAt(provider, index),
             onHover: () => setState(() => _selectedIndex = index),
           );
         },
@@ -553,10 +563,12 @@ class _TagChip extends StatelessWidget {
 class _PlaceholderForm extends StatefulWidget {
   final String snippetName;
   final List<String> placeholders;
+  final Map<String, String> defaults;
 
   const _PlaceholderForm({
     required this.snippetName,
     required this.placeholders,
+    this.defaults = const {},
   });
 
   @override
@@ -565,7 +577,8 @@ class _PlaceholderForm extends StatefulWidget {
 
 class _PlaceholderFormState extends State<_PlaceholderForm> {
   late final Map<String, TextEditingController> _controllers = {
-    for (final name in widget.placeholders) name: TextEditingController(),
+    for (final name in widget.placeholders)
+      name: TextEditingController(text: widget.defaults[name] ?? ''),
   };
 
   @override
