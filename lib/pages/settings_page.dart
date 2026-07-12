@@ -13,6 +13,7 @@ import '../utils/constants.dart';
 import '../services/importers/importer.dart';
 import '../services/importers/powershell_history_importer.dart';
 import '../services/importers/vscode_snippets_importer.dart';
+import '../services/update_checker.dart';
 import '../utils/hotkey.dart';
 import '../widgets/hotkey_recorder.dart';
 import 'import_page.dart';
@@ -427,14 +428,25 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
           const SizedBox(height: 28),
           Center(
-            child: Text(
-              'CopyShelf v${AppConstants.version}',
-              style:
-                  const TextStyle(fontSize: 12, color: AppTheme.inkFaint),
+            child: TextButton(
+              key: const Key('about-button'),
+              onPressed: _showAbout,
+              child: Text(
+                'CopyShelf v${AppConstants.version} · 关于',
+                style:
+                    const TextStyle(fontSize: 12, color: AppTheme.inkFaint),
+              ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _showAbout() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => const _AboutDialog(),
     );
   }
 
@@ -682,6 +694,90 @@ class _SettingsPageState extends State<SettingsPage> {
         Text(helper,
             style:
                 const TextStyle(fontSize: 11.5, color: AppTheme.inkFaint)),
+      ],
+    );
+  }
+}
+
+/// 关于对话框：版本号、开源地址、可用的「检查更新」按钮
+class _AboutDialog extends StatefulWidget {
+  const _AboutDialog();
+
+  @override
+  State<_AboutDialog> createState() => _AboutDialogState();
+}
+
+class _AboutDialogState extends State<_AboutDialog> {
+  String? _status;
+  bool _checking = false;
+
+  Future<void> _checkUpdate() async {
+    setState(() {
+      _checking = true;
+      _status = null;
+    });
+    final result = await UpdateChecker().check(AppConstants.version);
+    if (!mounted) return;
+    setState(() {
+      _checking = false;
+      if (result.error != null) {
+        _status = result.error;
+      } else if (result.hasUpdate) {
+        _status = '发现新版本 ${result.latestVersion}，可到 GitHub Releases 下载';
+      } else {
+        _status = '已是最新版本';
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      key: const Key('about-dialog'),
+      title: const Text('关于 CopyShelf'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('版本 v${AppConstants.version}',
+              style: const TextStyle(fontSize: 13)),
+          const SizedBox(height: 6),
+          const SelectableText(
+            'https://github.com/qpzm7903/CopyShelf',
+            style: TextStyle(fontSize: 12, color: AppTheme.inkSecondary),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              OutlinedButton.icon(
+                key: const Key('check-update-button'),
+                onPressed: _checking ? null : _checkUpdate,
+                icon: _checking
+                    ? const SizedBox(
+                        width: 13,
+                        height: 13,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.system_update_alt, size: 15),
+                label: Text(_checking ? '检查中…' : '检查更新',
+                    style: const TextStyle(fontSize: 12.5)),
+              ),
+              const SizedBox(width: 10),
+              if (_status != null)
+                Expanded(
+                  child: Text(_status!,
+                      key: const Key('update-status'),
+                      style: const TextStyle(
+                          fontSize: 12, color: AppTheme.inkSecondary)),
+                ),
+            ],
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('关闭'),
+        ),
       ],
     );
   }
