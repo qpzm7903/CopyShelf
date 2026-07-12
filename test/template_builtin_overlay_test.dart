@@ -32,7 +32,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     final pasted = <String>[];
     final storage = MockStorageService();
-    await storage.saveSnippets([Snippet(id: 't', name: 'tpl', content: content)]);
+    await storage.saveSnippets([Snippet(id: 't', name: 'tpl', content: content, isTemplate: true)]);
 
     final provider = SnippetProvider(
       storage: storage,

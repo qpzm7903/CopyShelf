@@ -10,6 +10,10 @@ class Snippet {
   final List<String> tags;
   final DateTime createdAt;
 
+  /// 是否作为模板：为 true 时粘贴前解析 {占位符}/内置变量并填表渲染；
+  /// 为 false（默认）时逐字粘贴——含字面大括号的命令/JSON 不会被误当占位符。
+  final bool isTemplate;
+
   Snippet({
     required this.id,
     required this.name,
@@ -17,6 +21,7 @@ class Snippet {
     this.description = '',
     List<String>? tags,
     DateTime? createdAt,
+    this.isTemplate = false,
   })  : tags = List.unmodifiable(tags ?? const []),
         createdAt = createdAt ?? DateTime.now();
 
@@ -27,6 +32,7 @@ class Snippet {
         'description': description,
         'tags': tags,
         'createdAt': createdAt.toIso8601String(),
+        if (isTemplate) 'isTemplate': true,
       };
 
   /// 旧版数据文件中的 frequency/lastUsedAt 字段直接忽略。
@@ -43,6 +49,7 @@ class Snippet {
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'] as String)
           : null,
+      isTemplate: json['isTemplate'] as bool? ?? false,
     );
   }
 
@@ -51,6 +58,7 @@ class Snippet {
     String? content,
     String? description,
     List<String>? tags,
+    bool? isTemplate,
   }) {
     return Snippet(
       id: id,
@@ -59,6 +67,7 @@ class Snippet {
       description: description ?? this.description,
       tags: tags ?? List.from(this.tags),
       createdAt: createdAt,
+      isTemplate: isTemplate ?? this.isTemplate,
     );
   }
 }

@@ -6,16 +6,15 @@ class ImportCandidate {
   /// 该内容在来源中出现的次数（用于排序，越常用越靠前）
   final int frequency;
 
-  /// content 是否已是最终模板形态（占位符/转义都处理好了）。
-  /// true 时入库不再做字面大括号转义——用于 VS Code 等已转换 tabstop 的来源，
-  /// 否则会把有意生成的 {占位符} 二次转义成字面量。
-  final bool preEscaped;
+  /// 该候选入库后是否作为模板（isTemplate）。
+  /// VS Code 片段带 tabstop → true（占位符已转换）；PowerShell 历史 → false（逐字）。
+  final bool isTemplate;
 
   const ImportCandidate({
     required this.name,
     required this.content,
     this.frequency = 1,
-    this.preEscaped = false,
+    this.isTemplate = false,
   });
 }
 
@@ -43,7 +42,7 @@ String escapeLiteralBraces(String content) {
   return buffer.toString();
 }
 
-/// 过滤掉与已有内容重复的候选（按转义后最终内容比较）。
+/// 过滤掉与已有内容重复的候选（按最终入库内容比较，与库中已存内容对齐）。
 /// [existingContents] 是库中已有片段的 content 集合。
 List<ImportCandidate> dedupeCandidates(
   List<ImportCandidate> candidates,
@@ -52,17 +51,14 @@ List<ImportCandidate> dedupeCandidates(
   final seen = <String>{...existingContents};
   final result = <ImportCandidate>[];
   for (final c in candidates) {
-    if (seen.add(c.content)) result.add(c);
+    if (seen.add(candidateToSnippetContent(c))) result.add(c);
   }
   return result;
 }
 
-/// 候选最终入库的内容：
-/// - preEscaped 候选（如 VS Code 已转换 tabstop）原样入库，不再转义；
-/// - 其余含大括号的原始内容做字面转义，使导入的代码/命令不会被当模板解析。
-String candidateToSnippetContent(ImportCandidate c) {
-  if (c.preEscaped) return c.content;
-  return c.content.contains('{') || c.content.contains('}')
-      ? escapeLiteralBraces(c.content)
-      : c.content;
-}
+/// 候选最终入库的内容。
+///
+/// isTemplate 引入后，非模板候选（如 PowerShell 历史）逐字入库、不转义
+/// （粘贴时也逐字，含大括号不会被误当占位符）；模板候选（如 VS Code）已在
+/// 解析阶段完成 tabstop 转换与字面大括号转义，原样入库。
+String candidateToSnippetContent(ImportCandidate c) => c.content;

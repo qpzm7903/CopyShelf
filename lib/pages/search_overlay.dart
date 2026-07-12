@@ -130,26 +130,37 @@ class _SearchOverlayState extends State<SearchOverlay> {
     if (index < 0 || index >= snippets.length) return;
     final snippet = snippets[index];
 
-    // 占位符模板：只有自定义占位符需填表（内置变量 date/time/clipboard 自动求值）
-    var values = <String, String>{};
-    final fields = userInputPlaceholders(snippet.content);
-    if (fields.isNotEmpty) {
-      final defaults = {
-        for (final name in fields)
-          name: defaultValueFor(snippet.content, name),
-      };
-      final filled = await _promptPlaceholders(snippet.name, fields, defaults);
-      if (filled == null) return; // 用户取消
-      values = filled;
-    }
+    // 只有显式标记为模板的片段才解析占位符；普通片段逐字粘贴，
+    // 避免含字面大括号的命令/JSON（如 kubectl jsonpath='{...}'）被误当模板。
+    String content = snippet.content;
+    if (snippet.isTemplate) {
+      var values = <String, String>{};
+      final fields = userInputPlaceholders(snippet.content);
+      if (fields.isNotEmpty) {
+        final defaults = {
+          for (final name in fields)
+            name: defaultValueFor(snippet.content, name),
+        };
+        final filled =
+            await _promptPlaceholders(snippet.name, fields, defaults);
+        if (filled == null) return; // 用户取消
+        values = filled;
+      }
 
-    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-    final content = renderTemplateAdvanced(
-      snippet.content,
-      userValues: values,
-      now: DateTime.now(),
-      clipboard: clipboardData?.text ?? '',
-    );
+      String clipboard = '';
+      try {
+        final data = await Clipboard.getData(Clipboard.kTextPlain);
+        clipboard = data?.text ?? '';
+      } catch (_) {
+        // 读剪贴板失败不阻断粘贴，{clipboard} 退化为空串
+      }
+      content = renderTemplateAdvanced(
+        snippet.content,
+        userValues: values,
+        now: DateTime.now(),
+        clipboard: clipboard,
+      );
+    }
 
     // 终端多行护栏：以最终粘贴内容判定，多行片段粘进终端会被逐行执行
     if (provider.needsTerminalPasteConfirm(snippet.id,

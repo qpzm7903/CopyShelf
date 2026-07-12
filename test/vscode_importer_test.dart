@@ -64,7 +64,7 @@ void main() {
       expect(candidates, hasLength(1));
       expect(candidates.first.name, 'Print to console (log)');
       expect(candidates.first.content, "console.log('{arg1}');\n{arg2}");
-      expect(candidates.first.preEscaped, isTrue);
+      expect(candidates.first.isTemplate, isTrue);
     });
 
     test('body 为字符串（非数组）也支持', () {
@@ -100,7 +100,7 @@ void main() {
       expect(VsCodeSnippetsImporter.parse('not json at all {{{'), isEmpty);
     });
 
-    test('候选入库不被二次转义（preEscaped）', () {
+    test('候选入库不被二次转义（isTemplate）', () {
       const jsonc =
           r'{"Fn": {"prefix": "fn", "body": "if (x) { $1 }"}}';
       final candidates = VsCodeSnippetsImporter.parse(jsonc);

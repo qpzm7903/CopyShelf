@@ -33,7 +33,7 @@ void main() {
     final pasted = <String>[];
     final storage = MockStorageService();
     await storage.saveSnippets(
-        [Snippet(id: 'tpl', name: 'commit-msg', content: content)]);
+        [Snippet(id: 'tpl', name: 'commit-msg', content: content, isTemplate: true)]);
 
     final provider = SnippetProvider(
       storage: storage,

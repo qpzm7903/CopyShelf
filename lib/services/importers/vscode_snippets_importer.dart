@@ -59,7 +59,7 @@ class VsCodeSnippetsImporter extends Importer {
       result.add(ImportCandidate(
         name: name,
         content: convertTabstops(content),
-        preEscaped: true,
+        isTemplate: true,
       ));
     });
     return result;

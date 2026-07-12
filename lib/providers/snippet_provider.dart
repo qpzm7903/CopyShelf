@@ -308,6 +308,7 @@ class SnippetProvider extends ChangeNotifier {
     required String content,
     String description = '',
     List<String>? tags,
+    bool isTemplate = false,
   }) async {
     final snippet = Snippet(
       id: _uuid.v4(),
@@ -315,6 +316,7 @@ class SnippetProvider extends ChangeNotifier {
       content: content,
       description: description,
       tags: tags,
+      isTemplate: isTemplate,
     );
 
     _snippets = [..._snippets, snippet];
@@ -332,6 +334,7 @@ class SnippetProvider extends ChangeNotifier {
     required String content,
     String description = '',
     List<String>? tags,
+    bool? isTemplate,
   }) async {
     final index = _snippets.indexWhere((s) => s.id == id);
     if (index == -1) return;
@@ -341,6 +344,7 @@ class SnippetProvider extends ChangeNotifier {
       content: content,
       description: description,
       tags: tags,
+      isTemplate: isTemplate,
     );
     _snippets = [
       ..._snippets.sublist(0, index),
@@ -418,8 +422,15 @@ class SnippetProvider extends ChangeNotifier {
     required String name,
     required String content,
     List<String>? tags,
+    bool isTemplate = false,
   }) =>
-      Snippet(id: _uuid.v4(), name: name, content: content, tags: tags);
+      Snippet(
+        id: _uuid.v4(),
+        name: name,
+        content: content,
+        tags: tags,
+        isTemplate: isTemplate,
+      );
 
   // ========== 片段历史回滚 ==========
 

@@ -50,6 +50,7 @@ class _ImportPageState extends State<ImportPage> {
         provider.buildSnippet(
           name: candidates[i].name,
           content: candidateToSnippetContent(candidates[i]),
+          isTemplate: candidates[i].isTemplate,
         ),
     ];
     final count = await provider.importSnippets(incoming);

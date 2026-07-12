@@ -101,7 +101,7 @@ void main() {
       expect(find.byKey(const Key('import-empty')), findsOneWidget);
     });
 
-    testWidgets('含大括号候选入库时被转义', (tester) async {
+    testWidgets('非模板候选逐字入库（含大括号不转义，标 isTemplate=false）', (tester) async {
       final provider = await pump(tester, const [
         ImportCandidate(name: 'p', content: 'ls | % { \$_.Name }'),
       ]);
@@ -109,7 +109,20 @@ void main() {
       await tester.tap(find.byKey(const Key('import-confirm')));
       await tester.pumpAndSettle();
 
-      expect(provider.snippets.single.content, contains('{{'));
+      expect(provider.snippets.single.content, 'ls | % { \$_.Name }');
+      expect(provider.snippets.single.isTemplate, isFalse);
+    });
+
+    testWidgets('模板候选（VS Code）入库标 isTemplate=true', (tester) async {
+      final provider = await pump(tester, const [
+        ImportCandidate(
+            name: 'v', content: 'echo {arg1}', isTemplate: true),
+      ]);
+
+      await tester.tap(find.byKey(const Key('import-confirm')));
+      await tester.pumpAndSettle();
+
+      expect(provider.snippets.single.isTemplate, isTrue);
     });
   });
 }

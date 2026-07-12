@@ -24,6 +24,7 @@ class _SnippetEditorPageState extends State<SnippetEditorPage> {
   final _tagController = TextEditingController();
   late List<String> _tags;
   bool _isSaving = false;
+  late bool _isTemplate;
 
   bool get _isEditing => widget.snippet != null;
 
@@ -36,6 +37,7 @@ class _SnippetEditorPageState extends State<SnippetEditorPage> {
     _descController =
         TextEditingController(text: widget.snippet?.description ?? '');
     _tags = List.from(widget.snippet?.tags ?? const []);
+    _isTemplate = widget.snippet?.isTemplate ?? false;
   }
 
   @override
@@ -77,6 +79,7 @@ class _SnippetEditorPageState extends State<SnippetEditorPage> {
         content: content,
         description: _descController.text.trim(),
         tags: _tags,
+        isTemplate: _isTemplate,
       );
     } else {
       await provider.addSnippet(
@@ -84,6 +87,7 @@ class _SnippetEditorPageState extends State<SnippetEditorPage> {
         content: content,
         description: _descController.text.trim(),
         tags: _tags,
+        isTemplate: _isTemplate,
       );
     }
 
@@ -171,6 +175,8 @@ class _SnippetEditorPageState extends State<SnippetEditorPage> {
             ),
             const SizedBox(height: 12),
             _buildTagEditor(),
+            const SizedBox(height: 8),
+            _buildTemplateToggle(),
             const SizedBox(height: 16),
             const Text('内容 *',
                 style:
@@ -187,6 +193,38 @@ class _SnippetEditorPageState extends State<SnippetEditorPage> {
                   hintText: '命令、代码片段、prompt……支持多行，粘贴时原样输出',
                   alignLabelWithHint: true,
                 ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTemplateToggle() {
+    return InkWell(
+      key: const Key('template-toggle'),
+      onTap: () => setState(() => _isTemplate = !_isTemplate),
+      borderRadius: BorderRadius.circular(6),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: Checkbox(
+                value: _isTemplate,
+                onChanged: (v) => setState(() => _isTemplate = v ?? false),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                '作为模板：粘贴前把 {占位符} 填表、内置变量（date/time/clipboard）求值',
+                style: TextStyle(fontSize: 12, color: AppTheme.inkSecondary),
               ),
             ),
           ],

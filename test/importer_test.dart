@@ -14,14 +14,15 @@ void main() {
   });
 
   group('candidateToSnippetContent', () {
-    test('含大括号的导入内容被转义（避免误当占位符）', () {
+    test('非模板候选逐字入库（含大括号不转义，粘贴时也逐字）', () {
       const c = ImportCandidate(name: 'x', content: 'echo {var}');
-      expect(candidateToSnippetContent(c), 'echo {{var}}');
+      expect(candidateToSnippetContent(c), 'echo {var}');
     });
 
-    test('无大括号内容不变', () {
-      const c = ImportCandidate(name: 'x', content: 'git pull');
-      expect(candidateToSnippetContent(c), 'git pull');
+    test('模板候选（VS Code 已转换）原样入库', () {
+      const c = ImportCandidate(
+          name: 'x', content: 'echo {arg1}', isTemplate: true);
+      expect(candidateToSnippetContent(c), 'echo {arg1}');
     });
   });
 
@@ -91,13 +92,15 @@ void main() {
       expect(candidates.first.name.length, lessThanOrEqualTo(41));
     });
 
-    test('含字面大括号的历史命令保留原文（入库时才转义）', () {
+    test('含字面大括号的历史命令逐字入库（非模板，粘贴时不当占位符）', () {
       final candidates = PowerShellHistoryImporter.parseHistory(
           ['Get-Process | % { \$_.Name }']);
 
-      expect(candidates.first.content, contains('{'));
-      // 入库转义
-      expect(candidateToSnippetContent(candidates.first), contains('{{'));
+      expect(candidates.first.isTemplate, isFalse);
+      expect(candidates.first.content, 'Get-Process | % { \$_.Name }');
+      // 逐字入库，不转义
+      expect(candidateToSnippetContent(candidates.first),
+          'Get-Process | % { \$_.Name }');
     });
 
     test('topN 截断', () {

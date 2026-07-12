@@ -153,6 +153,18 @@ class GitService {
     return match?.group(1);
   }
 
+  /// 远端实际存在的分支名列表（比 HEAD symref 可靠，裸仓库 HEAD 可能过时）
+  Future<List<String>> _remoteBranches(String dataDir) async {
+    final result = await _git(dataDir, ['ls-remote', '--heads', 'origin']);
+    if (result.exitCode != 0) return const [];
+    final branches = <String>[];
+    for (final line in (result.stdout as String? ?? '').split('\n')) {
+      final match = RegExp(r'refs/heads/(\S+)').firstMatch(line);
+      if (match != null) branches.add(match.group(1)!);
+    }
+    return branches;
+  }
+
   /// 本地是否仍是未使用过的 scaffold（片段列表为空）。
   ///
   /// 片段为空时采用远端数据不会丢失任何用户内容（使用统计不入 Git，ADR-0001）。
@@ -184,10 +196,15 @@ class GitService {
       final output = '$stdout\n$stderr';
       // 没有对应远程分支：区分「远端空仓库」与「本地分支名与远端不一致」。
       // 后者若也当成功，会导致两台设备各推各的分支、永不互通（bug-M1）。
+      // 用实际 heads 列表判断（远端 HEAD symref 在裸仓库里可能过时，不可靠）。
       if (output.contains("couldn't find remote ref")) {
-        final remoteBranch = await _remoteDefaultBranch(dataDir);
-        if (remoteBranch == null) return null; // 远端确实为空
-        return '本地分支「$branch」在远端不存在（远端默认分支是「$remoteBranch」）。'
+        final branches = await _remoteBranches(dataDir);
+        if (branches.isEmpty) return null; // 远端确实为空
+        if (branches.contains(branch)) {
+          // 远端其实有同名分支（拉取瞬时问题），交由通用错误处理
+          return 'Git pull 失败：${stderr.trim()}';
+        }
+        return '本地分支「$branch」在远端不存在（远端分支：${branches.join('、')}）。'
             '两端分支名不一致会导致同步失效，请在设置页重新配置远端地址以对齐分支。';
       }
       if (output.contains('conflict') || output.contains('CONFLICT')) {
