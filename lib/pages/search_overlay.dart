@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../models/snippet.dart';
+import '../models/tag_filter.dart';
 import '../providers/snippet_provider.dart';
 import '../services/storage_service.dart';
 import '../theme/app_theme.dart';
@@ -259,6 +260,9 @@ class _SearchOverlayState extends State<SearchOverlay> {
           _selectedIndex = 0;
         }
 
+        // 库中有标签才显示侧栏；纯无标签用户保持极简单栏布局
+        final showSidebar = provider.allTags.isNotEmpty;
+
         return Focus(
           autofocus: true,
           focusNode: _focusNode,
@@ -269,9 +273,24 @@ class _SearchOverlayState extends State<SearchOverlay> {
               if (provider.notice != null)
                 _NoticeBanner(notice: provider.notice!),
               Expanded(
-                child: snippets.isEmpty
-                    ? _buildEmptyState(provider)
-                    : _buildSnippetList(provider, snippets),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (showSidebar)
+                      _TagSidebar(
+                        provider: provider,
+                        onSelect: (filter) {
+                          provider.setTagFilter(filter);
+                          setState(() => _selectedIndex = 0);
+                        },
+                      ),
+                    Expanded(
+                      child: snippets.isEmpty
+                          ? _buildEmptyState(provider)
+                          : _buildSnippetList(provider, snippets),
+                    ),
+                  ],
+                ),
               ),
               _buildFooter(snippets.length),
             ],
@@ -362,6 +381,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
 
     final isLibraryEmpty =
         provider.searchQuery.isEmpty && provider.snippets.isEmpty;
+    final isTagFiltered = !provider.tagFilter.isAll;
 
     return Container(
       color: AppTheme.surface,
@@ -376,7 +396,11 @@ class _SearchOverlayState extends State<SearchOverlay> {
           ),
           const SizedBox(height: 12),
           Text(
-            isLibraryEmpty ? '片段库还是空的' : '没有匹配的片段',
+            isLibraryEmpty
+                ? '片段库还是空的'
+                : isTagFiltered
+                    ? '该标签下没有匹配的片段'
+                    : '没有匹配的片段',
             style: const TextStyle(fontSize: 14, color: AppTheme.inkSecondary),
           ),
           const SizedBox(height: 6),
@@ -424,6 +448,111 @@ class _SearchOverlayState extends State<SearchOverlay> {
           const SizedBox(width: 12),
           _FooterLabel(count > 0 ? '$count 条片段' : ''),
         ],
+      ),
+    );
+  }
+}
+
+/// 左侧标签过滤栏：全部 / 无标签 / 库中各标签，点击与关键词搜索叠加过滤
+class _TagSidebar extends StatelessWidget {
+  final SnippetProvider provider;
+  final ValueChanged<TagFilter> onSelect;
+
+  const _TagSidebar({required this.provider, required this.onSelect});
+
+  @override
+  Widget build(BuildContext context) {
+    final current = provider.tagFilter;
+    return Container(
+      key: const Key('tag-sidebar'),
+      width: 128,
+      decoration: BoxDecoration(
+        color: AppTheme.canvasOf(context),
+        border: Border(
+          right: BorderSide(color: AppTheme.hairlineOf(context), width: 0.5),
+        ),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        children: [
+          _TagSidebarItem(
+            key: const Key('tag-item-all'),
+            label: '全部',
+            icon: Icons.grid_view_rounded,
+            isSelected: current == const TagFilter.all(),
+            onTap: () => onSelect(const TagFilter.all()),
+          ),
+          if (provider.hasUntaggedSnippets)
+            _TagSidebarItem(
+              key: const Key('tag-item-untagged'),
+              label: '无标签',
+              icon: Icons.label_off_outlined,
+              isSelected: current == const TagFilter.untagged(),
+              onTap: () => onSelect(const TagFilter.untagged()),
+            ),
+          ...provider.allTags.map(
+            (tag) => _TagSidebarItem(
+              key: Key('tag-item-$tag'),
+              label: tag,
+              isSelected: current == TagFilter.tag(tag),
+              onTap: () => onSelect(TagFilter.tag(tag)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TagSidebarItem extends StatelessWidget {
+  final String label;
+  final IconData? icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _TagSidebarItem({
+    super.key,
+    required this.label,
+    this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isSelected
+        ? AppTheme.accent
+        : AppTheme.inkSecondaryOf(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppTheme.accentTintOf(context)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            Icon(icon ?? Icons.label_outline, size: 13, color: color),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: color,
+                  fontWeight:
+                      isSelected ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

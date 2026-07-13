@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 import '../models/snippet.dart';
 import '../models/snippet_stats.dart';
 import '../models/sync_status.dart';
+import '../models/tag_filter.dart';
 import '../services/storage_service.dart';
 import '../services/git_service.dart';
 import '../services/paste_service.dart';
@@ -205,12 +206,44 @@ class SnippetProvider extends ChangeNotifier {
   /// 当前查询的自由关键词（去掉 #tag），供列表名称高亮命中字符
   String get searchText => parseSearchQuery(_searchQuery).text;
 
+  // ========== 标签过滤（侧栏） ==========
+
+  TagFilter _tagFilter = const TagFilter.all();
+
+  /// 侧栏当前选中的标签过滤条件，与关键词搜索叠加（AND）
+  TagFilter get tagFilter => _tagFilter;
+
+  void setTagFilter(TagFilter filter) {
+    _tagFilter = filter;
+    _applyFilter();
+    notifyListeners();
+  }
+
+  /// 库中全部标签：不区分大小写去重（保留首次出现的写法），按字典序排列
+  List<String> get allTags {
+    final seen = <String>{};
+    final tags = <String>[];
+    for (final s in _snippets) {
+      for (final t in s.tags) {
+        if (seen.add(t.toLowerCase())) tags.add(t);
+      }
+    }
+    tags.sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return tags;
+  }
+
+  /// 库中是否存在无标签片段（决定侧栏「无标签」项显隐）
+  bool get hasUntaggedSnippets => _snippets.any((s) => s.tags.isEmpty);
+
   void _applyFilter() {
+    final base = _tagFilter.isAll
+        ? _snippets
+        : _snippets.where((s) => _tagFilter.matches(s.tags)).toList();
     final query = parseSearchQuery(_searchQuery);
     if (query.isEmpty) {
-      _filteredSnippets = List.from(_snippets);
+      _filteredSnippets = List.from(base);
     } else {
-      _filteredSnippets = _snippets.where((snippet) {
+      _filteredSnippets = base.where((snippet) {
         // #tag 约束按片段标签精确过滤
         if (!matchesTags(snippet.tags, query.tags)) return false;
         if (query.text.isEmpty) return true;
@@ -505,6 +538,8 @@ class SnippetProvider extends ChangeNotifier {
   void showSearch() {
     _isSearchVisible = true;
     _searchQuery = '';
+    // 每次呼出回到「全部」：与清空搜索词一致，保证唤醒后所见即全库
+    _tagFilter = const TagFilter.all();
     _notice = null;
     _applyFilter();
     notifyListeners();
