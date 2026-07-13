@@ -116,6 +116,13 @@ class _SearchOverlayState extends State<SearchOverlay> {
       provider.hideSearch();
       return KeyEventResult.handled;
     }
+    // 空输入框按 Backspace 清除标签过滤（同标签输入框的通用习惯）
+    if (event.logicalKey == LogicalKeyboardKey.backspace &&
+        _searchController.text.isEmpty &&
+        !provider.tagFilter.isAll) {
+      _clearTagFilter(provider);
+      return KeyEventResult.handled;
+    }
     if (event.logicalKey == LogicalKeyboardKey.enter) {
       _pasteSelected(provider);
       return KeyEventResult.handled;
@@ -125,6 +132,16 @@ class _SearchOverlayState extends State<SearchOverlay> {
 
   void _pasteSelected(SnippetProvider provider) {
     _pasteAt(provider, _selectedIndex);
+  }
+
+  void _setTagFilter(SnippetProvider provider, TagFilter filter) {
+    provider.setTagFilter(filter);
+    setState(() => _selectedIndex = 0);
+    _inputFocusNode.requestFocus();
+  }
+
+  void _clearTagFilter(SnippetProvider provider) {
+    _setTagFilter(provider, const TagFilter.all());
   }
 
   Future<void> _pasteAt(SnippetProvider provider, int index) async {
@@ -260,8 +277,8 @@ class _SearchOverlayState extends State<SearchOverlay> {
           _selectedIndex = 0;
         }
 
-        // 库中有标签才显示侧栏；纯无标签用户保持极简单栏布局
-        final showSidebar = provider.allTags.isNotEmpty;
+        // 库非空即常驻标签栏（无标签时显示引导文案）；空库保持单栏空态
+        final showSidebar = provider.snippets.isNotEmpty;
 
         return Focus(
           autofocus: true,
@@ -279,10 +296,7 @@ class _SearchOverlayState extends State<SearchOverlay> {
                     if (showSidebar)
                       _TagSidebar(
                         provider: provider,
-                        onSelect: (filter) {
-                          provider.setTagFilter(filter);
-                          setState(() => _selectedIndex = 0);
-                        },
+                        onSelect: (filter) => _setTagFilter(provider, filter),
                       ),
                     Expanded(
                       child: snippets.isEmpty
@@ -314,6 +328,14 @@ class _SearchOverlayState extends State<SearchOverlay> {
         children: [
           Icon(Icons.search, size: 20, color: AppTheme.inkFaintOf(context)),
           const SizedBox(width: 10),
+          // 当前标签过滤的状态回显：点 × 或空输入框按 Backspace 清除
+          if (!provider.tagFilter.isAll) ...[
+            _ActiveTagChip(
+              filter: provider.tagFilter,
+              onClear: () => _clearTagFilter(provider),
+            ),
+            const SizedBox(width: 8),
+          ],
           Expanded(
             child: TextField(
               controller: _searchController,
@@ -453,7 +475,57 @@ class _SearchOverlayState extends State<SearchOverlay> {
   }
 }
 
-/// 左侧标签过滤栏：全部 / 无标签 / 库中各标签，点击与关键词搜索叠加过滤
+/// 搜索栏内的当前标签过滤胶囊（状态回显，点 × 清除）
+class _ActiveTagChip extends StatelessWidget {
+  final TagFilter filter;
+  final VoidCallback onClear;
+
+  const _ActiveTagChip({required this.filter, required this.onClear});
+
+  @override
+  Widget build(BuildContext context) {
+    final label = filter.isUntagged ? '无标签' : '# ${filter.tag}';
+    return Container(
+      key: const Key('active-tag-chip'),
+      padding: const EdgeInsets.fromLTRB(8, 3, 4, 3),
+      decoration: BoxDecoration(
+        color: AppTheme.accentTintOf(context),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 140),
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.accent,
+              ),
+            ),
+          ),
+          const SizedBox(width: 2),
+          InkWell(
+            key: const Key('active-tag-chip-clear'),
+            onTap: onClear,
+            borderRadius: BorderRadius.circular(4),
+            child: const Padding(
+              padding: EdgeInsets.all(2),
+              child: Icon(Icons.close, size: 12, color: AppTheme.accent),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 左侧标签栏：全部 / 无标签固定在顶部，发丝线下方是可独立滚动的标签列表。
+/// 库中还没有标签时显示引导文案（空态即邀请）。
 class _TagSidebar extends StatelessWidget {
   final SnippetProvider provider;
   final ValueChanged<TagFilter> onSelect;
@@ -463,18 +535,20 @@ class _TagSidebar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final current = provider.tagFilter;
+    final tags = provider.allTags;
     return Container(
       key: const Key('tag-sidebar'),
-      width: 128,
+      width: 132,
       decoration: BoxDecoration(
         color: AppTheme.canvasOf(context),
         border: Border(
           right: BorderSide(color: AppTheme.hairlineOf(context), width: 0.5),
         ),
       ),
-      child: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          const SizedBox(height: 6),
           _TagSidebarItem(
             key: const Key('tag-item-all'),
             label: '全部',
@@ -482,7 +556,8 @@ class _TagSidebar extends StatelessWidget {
             isSelected: current == const TagFilter.all(),
             onTap: () => onSelect(const TagFilter.all()),
           ),
-          if (provider.hasUntaggedSnippets)
+          // 全库都无标签时「无标签」与「全部」等价，只在混合库中显示
+          if (provider.hasUntaggedSnippets && tags.isNotEmpty)
             _TagSidebarItem(
               key: const Key('tag-item-untagged'),
               label: '无标签',
@@ -490,13 +565,39 @@ class _TagSidebar extends StatelessWidget {
               isSelected: current == const TagFilter.untagged(),
               onTap: () => onSelect(const TagFilter.untagged()),
             ),
-          ...provider.allTags.map(
-            (tag) => _TagSidebarItem(
-              key: Key('tag-item-$tag'),
-              label: tag,
-              isSelected: current == TagFilter.tag(tag),
-              onTap: () => onSelect(TagFilter.tag(tag)),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 7, 10, 5),
+            child: Container(
+              height: 0.5,
+              color: AppTheme.hairlineOf(context),
             ),
+          ),
+          Expanded(
+            child: tags.isEmpty
+                ? Padding(
+                    key: const Key('tag-rail-empty-hint'),
+                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 0),
+                    child: Text(
+                      '编辑片段时可添加标签',
+                      style: TextStyle(
+                        fontSize: 11,
+                        height: 1.6,
+                        color: AppTheme.inkFaintOf(context),
+                      ),
+                    ),
+                  )
+                : ListView(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    children: [
+                      for (final tag in tags)
+                        _TagSidebarItem(
+                          key: Key('tag-item-$tag'),
+                          label: tag,
+                          isSelected: current == TagFilter.tag(tag),
+                          onTap: () => onSelect(TagFilter.tag(tag)),
+                        ),
+                    ],
+                  ),
           ),
         ],
       ),
@@ -504,7 +605,9 @@ class _TagSidebar extends StatelessWidget {
   }
 }
 
-class _TagSidebarItem extends StatelessWidget {
+/// 标签栏单项。固定项（全部/无标签）带图标；
+/// 标签项用 `#` 前缀——与 `#tag` 搜索语法互相呼应。
+class _TagSidebarItem extends StatefulWidget {
   final String label;
   final IconData? icon;
   final bool isSelected;
@@ -519,39 +622,69 @@ class _TagSidebarItem extends StatelessWidget {
   });
 
   @override
+  State<_TagSidebarItem> createState() => _TagSidebarItemState();
+}
+
+class _TagSidebarItemState extends State<_TagSidebarItem> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    final color = isSelected
+    final color = widget.isSelected
         ? AppTheme.accent
         : AppTheme.inkSecondaryOf(context);
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? AppTheme.accentTintOf(context)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Row(
-          children: [
-            Icon(icon ?? Icons.label_outline, size: 13, color: color),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  color: color,
-                  fontWeight:
-                      isSelected ? FontWeight.w600 : FontWeight.w400,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: widget.isSelected
+                ? AppTheme.accentTintOf(context)
+                : _hovered
+                    ? Theme.of(context).hoverColor
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            children: [
+              if (widget.icon != null)
+                Icon(widget.icon, size: 13, color: color)
+              else
+                SizedBox(
+                  width: 13,
+                  child: Text(
+                    '#',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: widget.isSelected
+                          ? AppTheme.accent
+                          : AppTheme.inkFaintOf(context),
+                    ),
+                  ),
+                ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: color,
+                    fontWeight:
+                        widget.isSelected ? FontWeight.w600 : FontWeight.w400,
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
