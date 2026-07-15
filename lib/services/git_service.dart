@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../utils/constants.dart';
+import 'git_command_runner.dart';
 
 /// snippets.json 的一次提交记录
 class GitCommitInfo {
@@ -28,11 +29,19 @@ class GitCommitInfo {
 class GitService {
   static GitService? _instance;
 
+  static const Duration _defaultCommandTimeout = Duration(seconds: 30);
+
   SharedPreferences? _prefs;
   bool _initialized = false;
+  final GitCommandRunner _commandRunner;
+  final Duration _commandTimeout;
 
   @visibleForTesting
-  GitService();
+  GitService({
+    GitCommandRunner? commandRunner,
+    Duration commandTimeout = _defaultCommandTimeout,
+  })  : _commandRunner = commandRunner ?? GitCommandRunner(),
+        _commandTimeout = commandTimeout;
 
   static Future<GitService> get instance async {
     if (_instance != null) return _instance!;
@@ -64,11 +73,15 @@ class GitService {
 
   /// 在数据目录内执行 git 命令
   Future<ProcessResult> _git(String dir, List<String> args) async {
-    return Process.run('git', args,
-        workingDirectory: dir,
-        runInShell: true,
-        stdoutEncoding: utf8,
-        stderrEncoding: utf8);
+    return _commandRunner.run(
+      'git',
+      args,
+      workingDirectory: dir,
+      timeout: _commandTimeout,
+      environment: gitNonInteractiveEnvironment(
+        existingSshCommand: Platform.environment['GIT_SSH_COMMAND'],
+      ),
+    );
   }
 
   /// 当前分支名（探测而非硬编码：git init 的默认分支因环境而异）

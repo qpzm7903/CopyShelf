@@ -7,6 +7,7 @@ import '../providers/theme_controller.dart';
 import '../services/storage_service.dart';
 import '../services/git_service.dart';
 import '../services/autostart_service.dart';
+import '../services/hotkey_messages.dart';
 import '../services/hotkey_service.dart';
 import '../theme/app_theme.dart';
 import '../utils/constants.dart';
@@ -20,13 +21,25 @@ import '../widgets/hotkey_recorder.dart';
 import 'import_page.dart';
 import 'snippet_editor_page.dart';
 
+typedef HotkeyUpdater = Future<HotkeyRegistration> Function({
+  required int mod,
+  required int vk,
+});
+
 /// 设置页面
 ///
 /// 三个分区：片段库（增删改）、快捷键（录制修改）、数据与同步。
 class SettingsPage extends StatefulWidget {
   final VoidCallback? onBack;
+  final HotkeyUpdater? hotkeyUpdater;
+  final bool? isWindowsOverride;
 
-  const SettingsPage({super.key, this.onBack});
+  const SettingsPage({
+    super.key,
+    this.onBack,
+    this.hotkeyUpdater,
+    this.isWindowsOverride,
+  });
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -43,6 +56,8 @@ class _SettingsPageState extends State<SettingsPage> {
   /// 仅 Windows 上创建；其他平台不展示自启开关
   final AutostartService? _autostart =
       Platform.isWindows ? AutostartService(WindowsRunKeyStore()) : null;
+
+  bool get _isWindows => widget.isWindowsOverride ?? Platform.isWindows;
 
   @override
   void initState() {
@@ -99,27 +114,50 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // ---------- 快捷键 ----------
 
-  Future<void> _changeHotkey(Hotkey hotkey) async {
-    final storage = await StorageService.instance;
-    storage.hotkey = hotkey.format();
-
-    String message = '快捷键已保存为 ${hotkey.format()}，重启后生效';
-    if (Platform.isWindows) {
-      final result = await HotkeyService.updateHotkey(
+  Future<HotkeyRegistration> _tryUpdateHotkey(
+      HotkeyUpdater updater, Hotkey hotkey) async {
+    try {
+      return await updater(
         mod: hotkey.modifiers,
         vk: hotkey.virtualKey!,
       );
+    } catch (e) {
+      return HotkeyRegistration.failure('系统异常：$e');
+    }
+  }
+
+  Future<void> _changeHotkey(Hotkey hotkey) async {
+    if (hotkey.format() == _hotkey.format()) return;
+    final storage = await StorageService.instance;
+    final previous = _hotkey;
+
+    String message = '快捷键已保存为 ${hotkey.format()}，重启后生效';
+    if (_isWindows) {
+      final updater = widget.hotkeyUpdater ?? HotkeyService.updateHotkey;
+      final result = await _tryUpdateHotkey(updater, hotkey);
       if (!mounted) return;
       final provider = context.read<SnippetProvider>();
       if (result.ok) {
+        storage.hotkey = hotkey.format();
         provider.setHotkeyError(null);
         message = '快捷键已更新为 ${hotkey.format()}';
       } else {
+        final rollback = await _tryUpdateHotkey(updater, previous);
+        if (!mounted) return;
+        final recovery = rollback.ok
+            ? '已恢复 ${previous.format()}'
+            : '旧快捷键恢复也失败：${rollback.reason}；重启后仍使用 ${previous.format()}';
         provider.setHotkeyError(
-          '快捷键 ${hotkey.format()} 注册失败：${result.reason}。请更换快捷键。',
+          '快捷键 ${hotkey.format()} 注册失败：${result.reason}。$recovery。',
         );
-        message = '快捷键 ${hotkey.format()} 注册失败：${result.reason}';
+        message = '快捷键 ${hotkey.format()} 注册失败，$recovery';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message)),
+        );
+        return;
       }
+    } else {
+      storage.hotkey = hotkey.format();
     }
 
     if (!mounted) return;
