@@ -88,7 +88,7 @@ void main() {
   });
 
   testWidgets('标记为模板的同样内容才弹填表', (tester) async {
-    final ctx = await pumpOverlay(
+    await pumpOverlay(
       tester,
       Snippet(
           id: 't', name: 'tpl', content: 'hello {name}', isTemplate: true),

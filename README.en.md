@@ -15,12 +15,14 @@ The text snippets you reach for daily (Git commands, code fragments, LLM prompts
 - **Global hotkey** — `Ctrl+Alt+V` by default, customizable; shows a clear error and lets you rebind if the combo is already taken.
 - **Spotlight-style search** — live keyword filtering with pinyin support, ordered by **frecency** (frequency × recency).
 - **Paste to target window** — writes the clipboard and simulates `Ctrl+V` into the window that was focused when you summoned CopyShelf.
+- **Copy without pasting** — `Ctrl+Enter` copies the selected snippet without sending paste keystrokes to the target window.
+- **Quick create** — `Ctrl+N` opens the full editor with the search query as the name and current clipboard text as the content.
 - **Alt+1..9** — paste the Nth result directly, no arrow keys.
 - **Placeholder templates** (opt-in per snippet) — `{name}` fields prompt a fill-in form; built-in `{date}` / `{time}` / `{datetime}` / `{clipboard}` auto-resolve; `{name:default}` supports defaults. Non-template snippets (commands, JSON with literal braces) paste verbatim.
 - **Terminal multi-line guard** — pasting a multi-line snippet into a terminal asks for confirmation first, so it isn't run line by line.
 - **Pin** — pinned snippets always sort to the top.
 - **Importers** — PowerShell (PSReadLine) history and VS Code user snippets (tabstops converted to placeholders).
-- **Git multi-device sync** — auto commit/push on change, pull on startup, with a status indicator; first-run bootstrap adopts the remote automatically on a fresh device.
+- **Git multi-device sync** — auto commit/push on change, pull on startup, with a status indicator; first-run bootstrap adopts the remote automatically on a fresh device. Git commands are non-interactive and time-bounded.
 - **Snippet history & rollback** — restore any snippet to a past version from git history.
 - **Dark mode** — follow system / light / dark.
 - **Single-instance** — launching again wakes the running instance.
@@ -44,6 +46,10 @@ Prebuilt Windows binaries are attached to each [GitHub Release](https://github.c
 ## First run
 
 Zero configuration: CopyShelf starts in the tray and works immediately with a local snippet store. To sync across devices, open Settings and set a Git remote — a fresh device adopts the remote's snippets automatically.
+
+## Contributing
+
+See [plan.md](plan.md) for the version roadmap and the [maintenance and iteration guide](docs/maintenance.md) for issue priority, quality gates, Windows validation, and releases.
 
 ## License
 

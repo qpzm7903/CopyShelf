@@ -6,7 +6,14 @@ on:
       - main
     tags:
       - 'v*'
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   FLUTTER_VERSION: '3.44.1'
@@ -20,25 +27,32 @@ jobs:
     outputs:
       app_version: ${{ steps.version.outputs.jversion }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
       - name: Prepare package version
         id: version
         shell: bash
         run: |
-          jversion="0.1.0"
+          jversion=$(sed -nE 's/^version:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' pubspec.yaml | head -1)
+
+          if [[ -z "$jversion" ]]; then
+            echo "Could not read a semantic version from pubspec.yaml"
+            exit 1
+          fi
 
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             raw_tag="${{ github.ref_name }}"
             echo "Detected Tag: $raw_tag"
 
-            # 去除 'v' 或 'V' 前缀
             version=$(echo "$raw_tag" | sed -E 's/^[vV]//')
-            jversion=$(echo "$version" | sed -E 's/^([0-9]+\.[0-9]+(\.[0-9]+)?).*/\1/')
+            tag_version=$(echo "$version" | sed -nE 's/^([0-9]+\.[0-9]+\.[0-9]+).*/\1/p')
 
-            if [ -z "$jversion" ]; then
-              echo "Warning: Could not parse numeric version from tag $raw_tag, defaulting to 0.1.0"
-              jversion="0.1.0"
+            if [[ -z "$tag_version" || "$tag_version" != "$jversion" ]]; then
+              echo "Tag version ($tag_version) does not match pubspec.yaml ($jversion)"
+              exit 1
             fi
-            echo "Using Tag Version: $version (JPackage: $jversion)"
+            echo "Using Tag Version: $version"
           fi
 
           echo "jversion=$jversion" >> $GITHUB_OUTPUT
@@ -47,7 +61,7 @@ jobs:
   test:
     needs: [ metadata ]
     runs-on: windows-latest
-    name: Run tests
+    name: Analyze and test
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -72,12 +86,15 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Run static analysis
+        run: flutter analyze --no-fatal-infos
+
       - name: Run tests
         run: flutter test
 
   # ========== 构建 Windows ==========
   build-windows:
-    needs: [ metadata ]
+    needs: [ metadata, test ]
     runs-on: windows-latest
     name: Build Windows EXE
     permissions:
