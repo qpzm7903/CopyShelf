@@ -28,6 +28,7 @@ class SnippetVersion {
 /// 测试时可通过构造方法注入 mock 的 StorageService 和 GitService。
 /// 粘贴函数签名（测试时可注入 mock）
 typedef PasteFn = Future<PasteOutcome> Function(String text);
+typedef CopyFn = Future<bool> Function(String text);
 
 /// 目标窗口进程名获取函数（测试时可注入 mock）
 typedef TargetProcessNameFn = String? Function();
@@ -36,6 +37,7 @@ class SnippetProvider extends ChangeNotifier {
   final StorageService _storage;
   final GitService _git;
   final PasteFn _paste;
+  final CopyFn _copy;
   final TargetProcessNameFn _targetProcessName;
   final _uuid = Uuid();
 
@@ -55,10 +57,12 @@ class SnippetProvider extends ChangeNotifier {
     StorageService? storage,
     GitService? git,
     PasteFn? paste,
+    CopyFn? copy,
     TargetProcessNameFn? targetProcessName,
   })  : _storage = storage ?? (throw ArgumentError.notNull('storage')),
         _git = git ?? (throw ArgumentError.notNull('git')),
         _paste = paste ?? PasteService.paste,
+        _copy = copy ?? PasteService.copy,
         _targetProcessName =
             targetProcessName ?? (() => TargetWindowService.processName);
 
@@ -73,6 +77,18 @@ class SnippetProvider extends ChangeNotifier {
   /// 一次性提示信息（如粘贴降级为仅复制），下次呼出搜索框时清除
   String? get notice => _notice;
   bool get isSearchVisible => _isSearchVisible;
+
+  /// 从搜索窗进入片段编辑器时保持主窗口可见，供窗口失焦策略读取。
+  bool get isSnippetEditorOpen => _isSnippetEditorOpen;
+  bool _isSnippetEditorOpen = false;
+
+  void beginSnippetEditor() {
+    _isSnippetEditorOpen = true;
+  }
+
+  void endSnippetEditor() {
+    _isSnippetEditorOpen = false;
+  }
 
   /// 全局快捷键注册失败信息；null 表示注册正常
   String? get hotkeyError => _hotkeyError;
@@ -338,6 +354,33 @@ class SnippetProvider extends ChangeNotifier {
       _error = '保存使用统计失败: $e';
       notifyListeners();
     }
+  }
+
+  /// 记录片段被使用一次并仅复制到剪贴板。返回是否复制成功。
+  /// 不触发目标窗口粘贴，因此终端多行护栏不适用。
+  Future<bool> copySnippet(String id, {String? contentOverride}) async {
+    final index = _snippets.indexWhere((s) => s.id == id);
+    if (index == -1) return false;
+
+    _stats = {..._stats, id: statsFor(id).used(DateTime.now())};
+    _applyFilter();
+    notifyListeners();
+
+    final copied = await _copy(contentOverride ?? _snippets[index].content);
+    if (copied) {
+      _notice = '已复制「${_snippets[index].name}」到剪贴板';
+    } else {
+      _error = '复制失败：无法写入剪贴板';
+    }
+    notifyListeners();
+
+    try {
+      await _storage.saveStats(_stats);
+    } catch (e) {
+      _error = '保存使用统计失败: $e';
+      notifyListeners();
+    }
+    return copied;
   }
 
   // ========== CRUD ==========

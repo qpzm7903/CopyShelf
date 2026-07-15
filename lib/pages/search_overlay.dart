@@ -11,6 +11,7 @@ import '../utils/search_query.dart';
 import '../utils/template.dart';
 import '../widgets/key_caps.dart';
 import '../widgets/sync_indicator.dart';
+import 'snippet_editor_page.dart';
 
 /// 搜索主界面（类 Spotlight 搜索框）
 ///
@@ -94,6 +95,12 @@ class _SearchOverlayState extends State<SearchOverlay> {
 
     final count = provider.filteredSnippets.length;
 
+    if (HardwareKeyboard.instance.isControlPressed &&
+        event.logicalKey == LogicalKeyboardKey.keyN) {
+      _openQuickCreate(provider);
+      return KeyEventResult.handled;
+    }
+
     // Alt+1..9：直达粘贴列表第 N 项
     if (HardwareKeyboard.instance.isAltPressed) {
       final number = _digitKeys[event.logicalKey];
@@ -124,7 +131,11 @@ class _SearchOverlayState extends State<SearchOverlay> {
       return KeyEventResult.handled;
     }
     if (event.logicalKey == LogicalKeyboardKey.enter) {
-      _pasteSelected(provider);
+      if (HardwareKeyboard.instance.isControlPressed) {
+        _copyAt(provider, _selectedIndex);
+      } else {
+        _pasteSelected(provider);
+      }
       return KeyEventResult.handled;
     }
     return KeyEventResult.ignored;
@@ -144,42 +155,41 @@ class _SearchOverlayState extends State<SearchOverlay> {
     _setTagFilter(provider, const TagFilter.all());
   }
 
+  Future<void> _openQuickCreate(SnippetProvider provider) async {
+    if (provider.isSnippetEditorOpen) return;
+    provider.beginSnippetEditor();
+    try {
+      String clipboard = '';
+      try {
+        final data = await Clipboard.getData(Clipboard.kTextPlain)
+            .timeout(const Duration(milliseconds: 500));
+        clipboard = data?.text ?? '';
+      } catch (_) {
+        // 剪贴板不可读时仍打开完整编辑器，由用户手动填写内容。
+      }
+      if (!mounted) return;
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => SnippetEditorPage(
+            initialName: _searchController.text.trim(),
+            initialContent: clipboard,
+          ),
+        ),
+      );
+    } finally {
+      provider.endSnippetEditor();
+      if (mounted) _inputFocusNode.requestFocus();
+    }
+  }
+
   Future<void> _pasteAt(SnippetProvider provider, int index) async {
     final snippets = provider.filteredSnippets;
     if (index < 0 || index >= snippets.length) return;
     final snippet = snippets[index];
 
-    // 只有显式标记为模板的片段才解析占位符；普通片段逐字粘贴，
-    // 避免含字面大括号的命令/JSON（如 kubectl jsonpath='{...}'）被误当模板。
-    String content = snippet.content;
-    if (snippet.isTemplate) {
-      var values = <String, String>{};
-      final fields = userInputPlaceholders(snippet.content);
-      if (fields.isNotEmpty) {
-        final defaults = {
-          for (final name in fields)
-            name: defaultValueFor(snippet.content, name),
-        };
-        final filled =
-            await _promptPlaceholders(snippet.name, fields, defaults);
-        if (filled == null) return; // 用户取消
-        values = filled;
-      }
-
-      String clipboard = '';
-      try {
-        final data = await Clipboard.getData(Clipboard.kTextPlain);
-        clipboard = data?.text ?? '';
-      } catch (_) {
-        // 读剪贴板失败不阻断粘贴，{clipboard} 退化为空串
-      }
-      content = renderTemplateAdvanced(
-        snippet.content,
-        userValues: values,
-        now: DateTime.now(),
-        clipboard: clipboard,
-      );
-    }
+    final content = await _prepareContent(snippet);
+    if (content == null) return;
 
     // 终端多行护栏：以最终粘贴内容判定，多行片段粘进终端会被逐行执行
     if (provider.needsTerminalPasteConfirm(snippet.id,
@@ -190,6 +200,52 @@ class _SearchOverlayState extends State<SearchOverlay> {
 
     provider.useSnippet(snippet.id, contentOverride: content);
     provider.hideSearch();
+  }
+
+  /// Ctrl+Enter 仅复制。复制不向目标窗口发送按键，因此不触发终端护栏。
+  Future<void> _copyAt(SnippetProvider provider, int index) async {
+    final snippets = provider.filteredSnippets;
+    if (index < 0 || index >= snippets.length) return;
+    final snippet = snippets[index];
+    final content = await _prepareContent(snippet);
+    if (content == null) return;
+    await provider.copySnippet(snippet.id, contentOverride: content);
+  }
+
+  /// 普通片段原样返回；模板片段完成填表和内置变量求值。
+  /// null 表示用户取消了占位符表单。
+  Future<String?> _prepareContent(Snippet snippet) async {
+    // 只有显式标记为模板的片段才解析占位符；普通片段逐字粘贴，
+    // 避免含字面大括号的命令/JSON（如 kubectl jsonpath='{...}'）被误当模板。
+    if (snippet.isTemplate) {
+      var values = <String, String>{};
+      final fields = userInputPlaceholders(snippet.content);
+      if (fields.isNotEmpty) {
+        final defaults = {
+          for (final name in fields)
+            name: defaultValueFor(snippet.content, name),
+        };
+        final filled =
+            await _promptPlaceholders(snippet.name, fields, defaults);
+        if (filled == null) return null; // 用户取消
+        values = filled;
+      }
+
+      String clipboard = '';
+      try {
+        final data = await Clipboard.getData(Clipboard.kTextPlain);
+        clipboard = data?.text ?? '';
+      } catch (_) {
+        // 读剪贴板失败不阻断粘贴，{clipboard} 退化为空串
+      }
+      return renderTemplateAdvanced(
+        snippet.content,
+        userValues: values,
+        now: DateTime.now(),
+        clipboard: clipboard,
+      );
+    }
+    return snippet.content;
   }
 
   /// 占位符填表对话框；返回 null 表示用户取消。[defaults] 预填每项默认值。
@@ -361,6 +417,16 @@ class _SearchOverlayState extends State<SearchOverlay> {
             ),
           ),
           const SizedBox(width: 12),
+          IconButton(
+            key: const Key('quick-create-button'),
+            icon: const Icon(Icons.add_rounded, size: 18),
+            color: AppTheme.inkSecondary,
+            tooltip: '从剪贴板新建 (Ctrl+N)',
+            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+            padding: EdgeInsets.zero,
+            onPressed: () => _openQuickCreate(provider),
+          ),
+          const SizedBox(width: 8),
           KeyCaps(_hotkey.parts),
         ],
       ),
@@ -461,6 +527,14 @@ class _SearchOverlayState extends State<SearchOverlay> {
           const KeyCaps(['Enter'], fontSize: 10),
           const SizedBox(width: 4),
           const _FooterLabel('粘贴'),
+          const SizedBox(width: 14),
+          const KeyCaps(
+            ['Ctrl', 'Enter'],
+            key: Key('copy-shortcut-hint'),
+            fontSize: 10,
+          ),
+          const SizedBox(width: 4),
+          const _FooterLabel('复制'),
           const SizedBox(width: 14),
           const KeyCaps(['Esc'], fontSize: 10),
           const SizedBox(width: 4),

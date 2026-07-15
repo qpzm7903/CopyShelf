@@ -34,7 +34,7 @@ class _HomePageState extends State<HomePage> with WindowListener {
   @override
   void onWindowBlur() {
     final provider = context.read<SnippetProvider>();
-    if (provider.isSettingsOpen) return;
+    if (provider.isSettingsOpen || provider.isSnippetEditorOpen) return;
     windowManager.hide();
     provider.hideSearch();
   }

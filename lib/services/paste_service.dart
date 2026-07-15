@@ -32,6 +32,16 @@ enum PasteOutcome {
 ///
 /// 明确的产品行为：粘贴会占据系统剪贴板，不恢复原有内容。
 class PasteService {
+  /// 仅写入系统剪贴板，不隐藏窗口、不切换焦点、不模拟粘贴。
+  static Future<bool> copy(String text) async {
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// 将文本粘贴到目标窗口。
   static Future<PasteOutcome> paste(String text) async {
     try {

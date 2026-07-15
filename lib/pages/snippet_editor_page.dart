@@ -10,8 +10,15 @@ import '../theme/app_theme.dart';
 /// [snippet] 为 null 时是新建。
 class SnippetEditorPage extends StatefulWidget {
   final Snippet? snippet;
+  final String initialName;
+  final String initialContent;
 
-  const SnippetEditorPage({super.key, this.snippet});
+  const SnippetEditorPage({
+    super.key,
+    this.snippet,
+    this.initialName = '',
+    this.initialContent = '',
+  });
 
   @override
   State<SnippetEditorPage> createState() => _SnippetEditorPageState();
@@ -31,9 +38,11 @@ class _SnippetEditorPageState extends State<SnippetEditorPage> {
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: widget.snippet?.name ?? '');
+    _nameController = TextEditingController(
+        text: widget.snippet?.name ?? widget.initialName);
     _contentController =
-        TextEditingController(text: widget.snippet?.content ?? '');
+        TextEditingController(
+            text: widget.snippet?.content ?? widget.initialContent);
     _descController =
         TextEditingController(text: widget.snippet?.description ?? '');
     _tags = List.from(widget.snippet?.tags ?? const []);
@@ -153,6 +162,7 @@ class _SnippetEditorPageState extends State<SnippetEditorPage> {
                 Expanded(
                   flex: 2,
                   child: TextField(
+                    key: const Key('snippet-name-field'),
                     controller: _nameController,
                     autofocus: !_isEditing,
                     decoration: const InputDecoration(
@@ -184,6 +194,7 @@ class _SnippetEditorPageState extends State<SnippetEditorPage> {
             const SizedBox(height: 6),
             Expanded(
               child: TextField(
+                key: const Key('snippet-content-field'),
                 controller: _contentController,
                 expands: true,
                 maxLines: null,
