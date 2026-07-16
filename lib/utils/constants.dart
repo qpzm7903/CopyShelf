@@ -2,7 +2,7 @@
 
 class AppConstants {
   static const String appName = 'CopyShelf';
-  static const String version = '0.1.25';
+  static const String version = '0.2.0';
 
   // 默认数据目录（相对用户目录）
   static const String defaultDataDirName = '.copyshelf';
