@@ -66,7 +66,7 @@ flutter build windows --release
 
 ## 版本
 
-当前稳定版本：v0.1.25
+当前稳定版本：v0.2.0
 
 ## 参与维护
 
