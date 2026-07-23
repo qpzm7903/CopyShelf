@@ -1,4 +1,4 @@
-Status: done (automated; Windows 实机验收待补)
+Status: released (v0.2.1, 2026-07-23; Windows 实机验收待补)
 
 # 01: 快捷键/托盘/唤醒呼出窗口时总是回到搜索界面
 
