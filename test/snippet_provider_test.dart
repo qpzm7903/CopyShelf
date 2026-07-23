@@ -273,6 +273,16 @@ void main() {
       expect(provider.isSearchVisible, isTrue);
     });
 
+    test('showSearch closes settings so reopen lands on search view', () {
+      provider.openSettings();
+      expect(provider.isSettingsOpen, isTrue);
+
+      provider.showSearch();
+
+      expect(provider.isSettingsOpen, isFalse);
+      expect(provider.isSearchVisible, isTrue);
+    });
+
     test('CRUD updates are persisted', () async {
       await provider.addSnippet(name: 'snip', content: 'c');
       expect(storage.storedSnippets.length, 1);

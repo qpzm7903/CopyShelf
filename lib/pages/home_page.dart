@@ -18,16 +18,41 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with WindowListener {
+  SnippetProvider? _provider;
+  int _lastSearchInvocation = 0;
+
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
+    // 监听「呼出」信号：每次呼出把残留的编辑器等 push 路由出栈，落回搜索界面。
+    // 设置页是视图切换（isSettingsOpen），由下方 build 复位，无需在此处理。
+    _provider = context.read<SnippetProvider>();
+    _lastSearchInvocation = _provider!.searchInvocation;
+    _provider!.addListener(_onProviderChanged);
   }
 
   @override
   void dispose() {
+    _provider?.removeListener(_onProviderChanged);
     windowManager.removeListener(this);
     super.dispose();
+  }
+
+  /// 呼出计数变化即说明用户重新呼出窗口：把盖在搜索界面之上的路由（如编辑器）出栈。
+  void _onProviderChanged() {
+    final provider = _provider;
+    if (provider == null) return;
+    if (provider.searchInvocation == _lastSearchInvocation) return;
+    _lastSearchInvocation = provider.searchInvocation;
+
+    final navigator = Navigator.of(context);
+    if (!navigator.canPop()) return;
+    // 在帧回调里出栈，避免在 notifyListeners 触发的回调中同步操作导航栈。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      navigator.popUntil((route) => route.isFirst);
+    });
   }
 
   /// 失焦即隐藏：仅搜索模式生效——设置页可能需要切去别处复制 Git 地址

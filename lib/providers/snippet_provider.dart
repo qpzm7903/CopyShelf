@@ -78,6 +78,11 @@ class SnippetProvider extends ChangeNotifier {
   String? get notice => _notice;
   bool get isSearchVisible => _isSearchVisible;
 
+  /// 每次呼出搜索窗（showSearch）自增。widget 层据此把残留的编辑器路由出栈，
+  /// 保证呼出后总落在搜索界面——设置页由 [isSettingsOpen] 复位覆盖。
+  int get searchInvocation => _searchInvocation;
+  int _searchInvocation = 0;
+
   /// 从搜索窗进入片段编辑器时保持主窗口可见，供窗口失焦策略读取。
   bool get isSnippetEditorOpen => _isSnippetEditorOpen;
   bool _isSnippetEditorOpen = false;
@@ -580,9 +585,12 @@ class SnippetProvider extends ChangeNotifier {
 
   void showSearch() {
     _isSearchVisible = true;
+    _searchInvocation++;
     _searchQuery = '';
     // 每次呼出回到「全部」：与清空搜索词一致，保证唤醒后所见即全库
     _tagFilter = const TagFilter.all();
+    // 呼出必回搜索界面：清掉可能残留的设置页，避免上次留在设置页时再呼出仍是设置页
+    _isSettingsOpen = false;
     _notice = null;
     _applyFilter();
     notifyListeners();
